@@ -27,10 +27,10 @@ AGIXT_REQUIRE_API_KEY="false"
 # GMAIL Configuration (RECOMMENDED - UPDATE THESE VALUES)
 SMTP_SERVER="smtp.gmail.com"
 SMTP_PORT="587"
-SMTP_USER="your-email@gmail.com"
-SMTP_PASSWORD="your-16-character-app-password"
+SMTP_USER="locodai.sas@gmail.com"
+SMTP_PASSWORD="onniirypzutceywv"
 SMTP_USE_TLS="true"
-FROM_EMAIL="your-email@gmail.com"
+FROM_EMAIL="locodai.sas@gmail.com"
 
 # Alternative SMTP Providers (uncomment to use instead of Gmail)
 # OUTLOOK
