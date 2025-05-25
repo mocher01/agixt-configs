@@ -33,7 +33,7 @@ import re
 from pathlib import Path
 
 # Configuration
-GITHUB_REPO_BASE = "https://raw.githubusercontent.com/YOUR-USERNAME/agixt-configs/main"
+GITHUB_REPO_BASE = "https://raw.githubusercontent.com/mocher01/agixt-configs/main"
 AGIXT_REPO = "https://github.com/Josh-XT/AGiXT.git"
 
 class Colors:
