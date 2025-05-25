@@ -4,10 +4,10 @@ AGiXT Automated Installer
 =========================
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME
 
 Example:
-  curl -sSL https://raw.githubusercontent.com/YOUR-USERNAME/agixt-configs/main/install-agixt.py | python3 - test-server
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - test-server
 
 This script will:
 1. Download the specified .env config from GitHub
@@ -419,16 +419,33 @@ def main():
     install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
     print(f"📁 Installation folder: {install_folder}")
     
-    # Step 4: Create installation directory
-    if os.path.exists(install_folder):
-        print_warning(f"Directory {install_folder} already exists")
+    # Step 4: Create installation directory in /var/apps
+    base_path = "/var/apps"
+    install_path = os.path.join(base_path, install_folder)
+
+    print_step(f"Creating installation directory: {install_path}")
+
+    # Ensure /var/apps exists with proper permissions
+    try:
+        os.makedirs(base_path, exist_ok=True)
+    except PermissionError:
+        print_error("Cannot create /var/apps directory. Run with sudo or create manually:")
+        print(f"sudo mkdir -p {base_path}")
+        print(f"sudo chown $USER:$USER {base_path}")
+        sys.exit(1)
+
+    if os.path.exists(install_path):
+        print_warning(f"Directory {install_path} already exists")
         response = input("Continue? (y/N): ").strip().lower()
         if response != 'y':
             print("Installation cancelled")
             sys.exit(0)
     else:
-        os.makedirs(install_folder, exist_ok=True)
-        print_success(f"Created directory: {install_folder}")
+        os.makedirs(install_path, exist_ok=True)
+        print_success(f"Created directory: {install_path}")
+
+    # Update install_folder variable for rest of script
+    install_folder = install_path
     
     # Step 5: Clone AGiXT repository
     print_step("Downloading AGiXT...")
