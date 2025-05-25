@@ -5,9 +5,11 @@ AGiXT Automated Installer
 
 Usage:
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME
+  python3 install-agixt.py CONFIG_NAME [GITHUB_TOKEN]
 
 Example:
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - test-server
+  python3 install-agixt.py test-server github_pat_xxxxx
 
 This script will:
 1. Download the specified .env config from GitHub
@@ -81,13 +83,31 @@ def run_command(command, cwd=None, check=True):
         return e
 
 def download_file(url, filename):
-    """Download a file from URL"""
+    """Download a file from URL with optional GitHub token support"""
     try:
         print(f"📥 Downloading {filename}...")
-        urllib.request.urlretrieve(url, filename)
+        
+        # Check if we have a GitHub token for private repos
+        github_token = os.environ.get('GITHUB_TOKEN')
+        
+        if github_token and 'github.com' in url:
+            # Create request with authorization header
+            req = urllib.request.Request(url)
+            req.add_header('Authorization', f'token {github_token}')
+            
+            with urllib.request.urlopen(req) as response:
+                with open(filename, 'wb') as f:
+                    f.write(response.read())
+        else:
+            # Standard download for public repos
+            urllib.request.urlretrieve(url, filename)
+            
         print_success(f"Downloaded {filename}")
         return True
     except urllib.error.URLError as e:
+        print_error(f"Failed to download {filename}: {e}")
+        return False
+    except Exception as e:
         print_error(f"Failed to download {filename}: {e}")
         return False
 
@@ -251,6 +271,7 @@ def patch_magical_auth(folder_path):
     # Create backup
     backup_path = f"{magical_auth_path}.backup"
     run_command(f"cp '{magical_auth_path}' '{backup_path}'")
+    print_success(f"Backup created: {backup_path}")
     
     try:
         with open(magical_auth_path, 'r') as f:
@@ -388,13 +409,21 @@ def main():
     print(f"{Colors.BOLD}🚀 AGiXT Automated Installer{Colors.END}")
     print("=" * 50)
     
-    # Check command line arguments
-    if len(sys.argv) != 2:
-        print_error("Usage: python3 install-agixt.py CONFIG_NAME")
+    # Parse command line arguments
+    if len(sys.argv) < 2:
+        print("Usage: python3 install-agixt.py <config_name> [github_token]")
         print("Example: python3 install-agixt.py test-server")
+        print("Example: python3 install-agixt.py test-server github_pat_xxxxx")
         sys.exit(1)
     
     config_name = sys.argv[1]
+    github_token = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    # Set token in environment for download_file function to use
+    if github_token:
+        os.environ['GITHUB_TOKEN'] = github_token
+        print_success(f"Using provided GitHub token for private repository access")
+    
     env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
     env_file = f"{config_name}.env"
     
@@ -475,7 +504,13 @@ def main():
     print(f"📁 Installation: {os.path.abspath(install_folder)}")
     print(f"🌐 Web Interface: {web_url}")
     print(f"🔗 API Endpoint: {api_url}")
-    print(f"📧 Email Login: {config.get('SMTP_USER', 'Not configured')}")
+    smtp_user = config.get('SMTP_USER', 'Not configured')
+    smtp_server = config.get('SMTP_SERVER', '')
+    if smtp_user != 'Not configured' and smtp_server:
+        print(f"📧 Email Login: {smtp_user} via {smtp_server}")
+    else:
+        print(f"📧 Email Login: {smtp_user}")
+    
     print("\n🚀 Next Steps:")
     print("1. Open the web interface in your browser")
     print("2. Login with your email address")
