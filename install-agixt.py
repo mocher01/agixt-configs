@@ -90,7 +90,7 @@ def download_file(url, filename):
         # Check if we have a GitHub token for private repos
         github_token = os.environ.get('GITHUB_TOKEN')
         
-        if github_token and 'github.com' in url:
+        if github_token and ('github.com' in url or 'githubusercontent.com' in url):
             # Create request with authorization header
             req = urllib.request.Request(url)
             req.add_header('Authorization', f'token {github_token}')
