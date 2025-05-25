@@ -1,0 +1,403 @@
+# =============================================================================
+# AGiXT Test Server Configuration - COMPREHENSIVE
+# =============================================================================
+
+# Installation Settings
+INSTALL_FOLDER_NAME="AGiXT-TestServer"
+SERVER_TYPE="test"
+
+# =============================================================================
+# SERVER CONFIGURATION  
+# =============================================================================
+
+# Ports & URLs
+AGIXT_PORT="7437"
+AGIXT_INTERACTIVE_PORT="3437"
+AGIXT_URI="http://localhost:7437"
+APP_URI="http://localhost:3437"
+
+# Security
+AGIXT_API_KEY=""
+AGIXT_REQUIRE_API_KEY="false"
+
+# =============================================================================
+# SMTP EMAIL CONFIGURATION (REQUIRED FOR LOGIN)
+# =============================================================================
+
+# GMAIL Configuration (RECOMMENDED - UPDATE THESE VALUES)
+SMTP_SERVER="smtp.gmail.com"
+SMTP_PORT="587"
+SMTP_USER="your-email@gmail.com"
+SMTP_PASSWORD="your-16-character-app-password"
+SMTP_USE_TLS="true"
+FROM_EMAIL="your-email@gmail.com"
+
+# Alternative SMTP Providers (uncomment to use instead of Gmail)
+# OUTLOOK
+#SMTP_SERVER="smtp-mail.outlook.com"
+#SMTP_PORT="587"
+#SMTP_USER="your-email@outlook.com"
+#SMTP_PASSWORD="your-outlook-password"
+#SMTP_USE_TLS="true"
+#FROM_EMAIL="your-email@outlook.com"
+
+# YAHOO
+#SMTP_SERVER="smtp.mail.yahoo.com"
+#SMTP_PORT="587"
+#SMTP_USER="your-email@yahoo.com"
+#SMTP_PASSWORD="your-yahoo-app-password"
+#SMTP_USE_TLS="true"
+#FROM_EMAIL="your-email@yahoo.com"
+
+# CUSTOM SMTP
+#SMTP_SERVER="mail.yourdomain.com"
+#SMTP_PORT="587"
+#SMTP_USER="your-email@yourdomain.com"
+#SMTP_PASSWORD="your-email-password"
+#SMTP_USE_TLS="true"
+#FROM_EMAIL="your-email@yourdomain.com"
+
+# =============================================================================
+# AI PROVIDERS (Configure at least one)
+# =============================================================================
+
+# OpenAI (RECOMMENDED - UPDATE THIS)
+OPENAI_API_KEY="sk-your-openai-api-key-here"
+OPENAI_MODEL="chatgpt-4o-latest"
+OPENAI_MAX_TOKENS="128000"
+
+# Anthropic Claude (EXCELLENT ALTERNATIVE)
+ANTHROPIC_API_KEY=""
+ANTHROPIC_MODEL="claude-3-5-sonnet-20241022"
+ANTHROPIC_MAX_TOKENS="140000"
+
+# Google AI (Gemini)
+GOOGLE_API_KEY=""
+GOOGLE_MODEL="gemini-2.0-flash-exp"
+GOOGLE_MAX_TOKENS="1048000"
+GOOGLE_TEMPERATURE="0.7"
+GOOGLE_TOP_P="0.95"
+
+# Azure OpenAI
+AZURE_API_KEY=""
+AZURE_MODEL="gpt-4o"
+AZURE_MAX_TOKENS="100000"
+AZURE_OPENAI_ENDPOINT=""
+AZURE_DEPLOYMENT_NAME="gpt-4o"
+AZURE_TEMPERATURE="0.7"
+AZURE_TOP_P="0.95"
+
+# xAI (Grok)
+XAI_API_KEY=""
+XAI_MODEL="grok-beta"
+XAI_MAX_TOKENS="120000"
+
+# DeepSeek
+DEEPSEEK_API_KEY=""
+DEEPSEEK_MODEL="deepseek-chat"
+DEEPSEEK_MAX_TOKENS="60000"
+
+# ezLocalAI (LOCAL AI SERVER)
+EZLOCALAI_URI="http://localhost:8091/v1/"
+EZLOCALAI_API_KEY=""
+EZLOCALAI_MAX_TOKENS="16000"
+EZLOCALAI_VOICE="DukeNukem"
+EZLOCALAI_TEMPERATURE="1.33"
+EZLOCALAI_TOP_P="0.95"
+WITH_EZLOCALAI="false"
+
+# HuggingFace
+HUGGINGFACE_API_KEY=""
+HUGGINGFACE_API_URL=""
+
+# Provider Management
+SMARTEST_PROVIDER="anthropic"
+ROTATION_EXCLUSIONS=""
+DISABLED_PROVIDERS=""
+
+# =============================================================================
+# PROVIDER-SPECIFIC SETTINGS
+# =============================================================================
+
+# ElevenLabs (Text-to-Speech)
+ELEVENLABS_API_KEY=""
+ELEVENLABS_VOICE=""
+
+# Default Provider Settings
+DEFAULT_MODEL="QuantFactory/dolphin-2.9.2-qwen2-7b-GGUF"
+VISION_MODEL="deepseek-ai/deepseek-vl-1.3b-chat"
+LLM_MAX_TOKENS="32768"
+WHISPER_MODEL="base.en"
+GPU_LAYERS="0"
+
+# =============================================================================
+# DATABASE CONFIGURATION
+# =============================================================================
+
+# SQLite (Default - Simple setup)
+DATABASE_TYPE="sqlite"
+DATABASE_NAME="models/agixt"
+
+# PostgreSQL (Production recommended - uncomment to use)
+#DATABASE_TYPE="postgresql"
+#DATABASE_HOST="localhost"
+#DATABASE_PORT="5432"
+#DATABASE_NAME="agixt"
+#DATABASE_USER="postgres"
+#DATABASE_PASSWORD="your-postgres-password"
+#DATABASE_SSL="disable"
+
+# =============================================================================
+# AUTHENTICATION & SSO
+# =============================================================================
+
+# Basic Authentication
+ALLOW_EMAIL_SIGN_IN="true"
+REGISTRATION_DISABLED="false"
+DEFAULT_USER="user"
+
+# Google SSO
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# GitHub SSO
+GITHUB_CLIENT_ID=""
+GITHUB_CLIENT_SECRET=""
+
+# Microsoft SSO
+MICROSOFT_CLIENT_ID=""
+MICROSOFT_CLIENT_SECRET=""
+
+# Discord SSO
+DISCORD_CLIENT_ID=""
+DISCORD_CLIENT_SECRET=""
+
+# Amazon SSO
+AWS_CLIENT_ID=""
+AWS_CLIENT_SECRET=""
+AWS_REGION=""
+AWS_USER_POOL_ID=""
+
+# Tesla SSO
+TESLA_CLIENT_ID=""
+TESLA_CLIENT_SECRET=""
+
+# X (Twitter) SSO
+X_CLIENT_ID=""
+X_CLIENT_SECRET=""
+
+# Additional OAuth Providers
+AOL_CLIENT_ID=""
+AOL_CLIENT_SECRET=""
+APPLE_CLIENT_ID=""
+APPLE_CLIENT_SECRET=""
+AUTODESK_CLIENT_ID=""
+AUTODESK_CLIENT_SECRET=""
+
+# =============================================================================
+# AGENT & SYSTEM SETTINGS
+# =============================================================================
+
+# Default Agent Configuration
+AGENT_NAME="TestAgent"
+AGIXT_AGENT="TestAgent"
+AGENT_PERSONA=""
+CREATE_AGENT_ON_REGISTER="true"
+CREATE_AGIXT_AGENT="true"
+
+# System Performance
+LOG_LEVEL="INFO"
+LOG_FORMAT="%(asctime)s | %(levelname)s | %(message)s"
+UVICORN_WORKERS="6"
+
+# Features & Capabilities
+SEED_DATA="true"
+AGIXT_AUTO_UPDATE="true"
+AGIXT_BRANCH="stable"
+ENABLED_COMMANDS=""
+TRAINING_URLS=""
+
+# File System & Storage
+WORKING_DIRECTORY="./WORKSPACE"
+DISABLED_EXTENSIONS=""
+
+# =============================================================================
+# WEB INTERFACE CUSTOMIZATION
+# =============================================================================
+
+# Application Branding
+APP_NAME="AGiXT Test Server"
+APP_DESCRIPTION="AGiXT Test Installation"
+AGIXT_FOOTER_MESSAGE="AGiXT Test Server - Powered by AI"
+INTERACTIVE_MODE="chat"
+THEME_NAME="doom"
+
+# Interface Features
+AGIXT_FILE_UPLOAD_ENABLED="true"
+AGIXT_VOICE_INPUT_ENABLED="true"
+AGIXT_RLHF="true"
+AGIXT_ALLOW_MESSAGE_EDITING="true"
+AGIXT_ALLOW_MESSAGE_DELETION="true"
+AGIXT_SHOW_OVERRIDE_SWITCHES="tts,websearch,analyze-user-input"
+AGIXT_CONVERSATION_MODE="select"
+AGIXT_SHOW_SELECTION="conversation,agent"
+AGIXT_SHOW_AGENT_BAR="true"
+AGIXT_SHOW_APP_BAR="true"
+AGIXT_SHOW_CHAT_THEME_TOGGLES=""
+
+# =============================================================================
+# CLOUD STORAGE (Optional - uses local by default)
+# =============================================================================
+
+# Local Storage (Default)
+STORAGE_BACKEND="local"
+STORAGE_CONTAINER="agixt-workspace"
+
+# AWS S3 (Uncomment to use)
+#STORAGE_BACKEND="s3"
+#S3_BUCKET="agixt-workspace"
+#S3_ENDPOINT="https://s3.amazonaws.com"
+#AWS_ACCESS_KEY_ID=""
+#AWS_SECRET_ACCESS_KEY=""
+#AWS_STORAGE_REGION="us-east-1"
+
+# Backblaze B2 (Uncomment to use)
+#STORAGE_BACKEND="b2"
+#B2_KEY_ID=""
+#B2_APPLICATION_KEY=""
+#B2_REGION="us-west-002"
+
+# Azure Blob Storage (Uncomment to use)
+#STORAGE_BACKEND="azure"
+#AZURE_STORAGE_ACCOUNT_NAME=""
+#AZURE_STORAGE_KEY=""
+
+# MinIO (Self-hosted S3-compatible)
+#STORAGE_BACKEND="s3"
+#S3_BUCKET="agixt-workspace"
+#S3_ENDPOINT="http://minio:9000"
+#AWS_ACCESS_KEY_ID="minioadmin"
+#AWS_SECRET_ACCESS_KEY="minioadmin"
+#AWS_STORAGE_REGION="us-east-1"
+
+# =============================================================================
+# NETWORK & SECURITY
+# =============================================================================
+
+# CORS & Access Control
+ALLOWED_DOMAINS="*"
+TZ="America/New_York"
+
+# Development & Debugging
+GRAPHIQL="true"
+LOG_VERBOSITY_SERVER="3"
+
+# Rate Limiting & Security
+WEBSEARCH_TIMEOUT="0"
+
+# =============================================================================
+# ADVANCED AI FEATURES
+# =============================================================================
+
+# Memory & Context
+CHROMA_PORT="8000"
+CHROMA_SSL="false"
+
+# Voice & Audio
+TTS="false"
+
+# Web Search & Browsing
+WEBSEARCH="false"
+WEBSEARCH_DEPTH="2"
+
+# Analysis Features
+ANALYZE_USER_INPUT="false"
+
+# =============================================================================
+# INTEGRATION EXTENSIONS
+# =============================================================================
+
+# Email Integration (SendGrid as backup)
+SENDGRID_API_KEY=""
+EMAIL_SERVER=""
+
+# Task Management
+SCHEDULED_TASKS="false"
+
+# Database Integrations
+MYSQL_CONNECTION_STRING=""
+POSTGRES_CONNECTION_STRING=""
+MSSQL_CONNECTION_STRING=""
+
+# External APIs
+WALMART_API_KEY=""
+OURA_CLIENT_ID=""
+OURA_CLIENT_SECRET=""
+
+# Social Media
+TWITTER_API_KEY=""
+TWITTER_API_SECRET=""
+TWITTER_ACCESS_TOKEN=""
+TWITTER_ACCESS_TOKEN_SECRET=""
+
+# Development Tools
+GITHUB_TOKEN=""
+
+# Blockchain & Crypto
+SOLANA_PRIVATE_KEY=""
+SOLANA_RPC_URL=""
+
+# =============================================================================
+# SPECIALIZED FEATURES
+# =============================================================================
+
+# Tesla Integration
+TESLA_EMAIL=""
+TESLA_PASSWORD=""
+
+# OpenSCAD 3D Modeling
+OPENSCAD_ENABLED="false"
+
+# Scientific Computing
+ARXIV_SEARCH_ENABLED="true"
+
+# Business Intelligence
+FINANCIAL_DATA_SOURCES=""
+
+# =============================================================================
+# PERFORMANCE TUNING
+# =============================================================================
+
+# Worker Configuration
+TOKENIZERS_PARALLELISM="false"
+
+# Memory Management
+MAX_MEMORY_ITEMS="1000"
+MEMORY_CLEANUP_INTERVAL="3600"
+
+# Cache Settings
+CACHE_ENABLED="true"
+CACHE_TTL="300"
+
+# Request Limits
+MAX_REQUEST_SIZE="100MB"
+REQUEST_TIMEOUT="300"
+
+# =============================================================================
+# EXPERIMENTAL FEATURES
+# =============================================================================
+
+# Beta Features (Use with caution in production)
+BETA_FEATURES_ENABLED="false"
+EXPERIMENTAL_PROVIDERS=""
+CUSTOM_EXTENSIONS_PATH=""
+
+# Research & Development
+R_AND_D_MODE="false"
+DEBUG_MODE="false"
+VERBOSE_LOGGING="false"
+
+# Future Features Placeholders
+FUTURE_FEATURE_1=""
+FUTURE_FEATURE_2=""
+FUTURE_FEATURE_3=""
