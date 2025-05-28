@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer
-=========================
+AGiXT Automated Installer - Enhanced Version
+===========================================
 
 Usage:
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME
@@ -14,12 +14,12 @@ Example:
 This script will:
 1. Download the specified .env config from GitHub
 2. Create installation folder based on INSTALL_FOLDER_NAME
-3. Download and set up AGiXT with SMTP support
-4. Apply all configurations
-5. Start the AGiXT server
+3. Download and set up AGiXT with all configurations
+4. Apply environment-specific patches
+5. Start the AGiXT server with proper health checks
 
-Author: Your Name
-Version: 1.0.0
+Author: Enhanced by Claude
+Version: 2.0.0
 """
 
 import os
@@ -32,11 +32,15 @@ import platform
 import time
 import json
 import re
+import secrets
+import shutil
 from pathlib import Path
+from typing import Dict, Optional, Tuple
 
 # Configuration
 GITHUB_REPO_BASE = "https://raw.githubusercontent.com/mocher01/agixt-configs/main"
 AGIXT_REPO = "https://github.com/Josh-XT/AGiXT.git"
+DEFAULT_BASE_PATH = "/var/apps"
 
 class Colors:
     """ANSI color codes for terminal output"""
@@ -45,47 +49,58 @@ class Colors:
     YELLOW = '\033[93m'
     RED = '\033[91m'
     BOLD = '\033[1m'
+    CYAN = '\033[96m'
+    MAGENTA = '\033[95m'
     END = '\033[0m'
 
-def print_step(message):
+def print_step(message: str):
     """Print a step message in blue"""
     print(f"\n{Colors.BLUE}🚀 {message}{Colors.END}")
 
-def print_success(message):
+def print_success(message: str):
     """Print a success message in green"""
     print(f"{Colors.GREEN}✅ {message}{Colors.END}")
 
-def print_warning(message):
+def print_warning(message: str):
     """Print a warning message in yellow"""
     print(f"{Colors.YELLOW}⚠️  {message}{Colors.END}")
 
-def print_error(message):
+def print_error(message: str):
     """Print an error message in red"""
     print(f"{Colors.RED}❌ {message}{Colors.END}")
 
-def run_command(command, cwd=None, check=True):
+def print_info(message: str):
+    """Print an info message in cyan"""
+    print(f"{Colors.CYAN}ℹ️  {message}{Colors.END}")
+
+def run_command(command: str, cwd: Optional[str] = None, check: bool = True, capture_output: bool = True) -> subprocess.CompletedProcess:
     """Run a shell command and return the result"""
     try:
+        print_info(f"Running: {command}")
         result = subprocess.run(
             command, 
             shell=True, 
             cwd=cwd,
-            capture_output=True, 
+            capture_output=capture_output, 
             text=True, 
             check=check
         )
+        if result.stdout and capture_output:
+            print(f"Output: {result.stdout.strip()}")
         return result
     except subprocess.CalledProcessError as e:
         print_error(f"Command failed: {command}")
-        print_error(f"Error: {e.stderr}")
+        print_error(f"Return code: {e.returncode}")
+        if e.stderr:
+            print_error(f"Error: {e.stderr}")
         if check:
             sys.exit(1)
         return e
 
-def download_file(url, filename):
+def download_file(url: str, filename: str) -> bool:
     """Download a file from URL with optional GitHub token support"""
     try:
-        print(f"📥 Downloading {filename}...")
+        print_info(f"Downloading {filename} from {url}")
         
         # Check if we have a GitHub token for private repos
         github_token = os.environ.get('GITHUB_TOKEN')
@@ -94,8 +109,9 @@ def download_file(url, filename):
             # Create request with authorization header
             req = urllib.request.Request(url)
             req.add_header('Authorization', f'token {github_token}')
+            req.add_header('User-Agent', 'AGiXT-Installer/2.0')
             
-            with urllib.request.urlopen(req) as response:
+            with urllib.request.urlopen(req, timeout=30) as response:
                 with open(filename, 'wb') as f:
                     f.write(response.read())
         else:
@@ -104,429 +120,700 @@ def download_file(url, filename):
             
         print_success(f"Downloaded {filename}")
         return True
+    except urllib.error.HTTPError as e:
+        print_error(f"HTTP Error {e.code}: {e.reason}")
+        if e.code == 404:
+            print_error(f"Configuration file '{filename}' not found in repository")
+        elif e.code == 403:
+            print_error("Access denied - check your GitHub token")
+        return False
     except urllib.error.URLError as e:
-        print_error(f"Failed to download {filename}: {e}")
+        print_error(f"Network error downloading {filename}: {e}")
         return False
     except Exception as e:
         print_error(f"Failed to download {filename}: {e}")
         return False
 
-def check_prerequisites():
-    """Check if required tools are installed"""
-    print_step("Checking prerequisites...")
+def check_system_requirements() -> bool:
+    """Check system requirements and compatibility"""
+    print_step("Checking system requirements...")
+    
+    # Check OS compatibility
+    system = platform.system().lower()
+    if system not in ['linux', 'darwin']:
+        print_error(f"Unsupported operating system: {system}")
+        print_error("This script supports Linux and macOS only")
+        return False
     
     # Check Python version
     if sys.version_info < (3, 8):
-        print_error("Python 3.8+ required")
-        sys.exit(1)
+        print_error(f"Python 3.8+ required, found {sys.version}")
+        return False
     print_success(f"Python {sys.version.split()[0]} ✓")
+    
+    # Check available disk space (minimum 5GB)
+    try:
+        statvfs = os.statvfs('/')
+        free_space_gb = (statvfs.f_frsize * statvfs.f_bavail) / (1024**3)
+        if free_space_gb < 5:
+            print_warning(f"Low disk space: {free_space_gb:.1f}GB available (5GB recommended)")
+        else:
+            print_success(f"Disk space: {free_space_gb:.1f}GB available ✓")
+    except:
+        print_warning("Could not check disk space")
+    
+    return True
+
+def check_prerequisites() -> bool:
+    """Check if required tools are installed"""
+    print_step("Checking prerequisites...")
+    
+    if not check_system_requirements():
+        return False
     
     # Check Git
     result = run_command("git --version", check=False)
     if result.returncode != 0:
         print_error("Git is required but not installed")
-        sys.exit(1)
+        print_info("Install with: sudo apt update && sudo apt install git")
+        return False
     print_success("Git ✓")
     
     # Check Docker
     result = run_command("docker --version", check=False)
     if result.returncode != 0:
-        print_warning("Docker not found - will attempt to install")
-        install_docker()
+        print_warning("Docker not found - attempting installation...")
+        if not install_docker():
+            return False
     else:
         print_success("Docker ✓")
+        # Check if Docker daemon is running
+        result = run_command("docker ps", check=False)
+        if result.returncode != 0:
+            print_error("Docker daemon is not running")
+            print_info("Start with: sudo systemctl start docker")
+            return False
     
     # Check Docker Compose
     result = run_command("docker compose version", check=False)
     if result.returncode != 0:
-        print_warning("Docker Compose not found - will attempt to install")
-        install_docker_compose()
+        print_warning("Docker Compose not found - attempting installation...")
+        if not install_docker_compose():
+            return False
     else:
         print_success("Docker Compose ✓")
+    
+    return True
 
-def install_docker():
+def install_docker() -> bool:
     """Install Docker based on the operating system"""
     system = platform.system().lower()
     
     if system == "linux":
         print_step("Installing Docker on Linux...")
+        
+        # Check if running as root or with sudo
+        if os.geteuid() != 0:
+            print_error("Docker installation requires root privileges")
+            print_info("Run with: sudo python3 install-agixt.py ...")
+            return False
+        
         commands = [
             "curl -fsSL https://get.docker.com -o get-docker.sh",
-            "sudo sh get-docker.sh",
-            "sudo usermod -aG docker $USER",
-            "sudo systemctl start docker",
-            "sudo systemctl enable docker"
+            "sh get-docker.sh",
+            "systemctl start docker",
+            "systemctl enable docker"
         ]
         
         for cmd in commands:
             result = run_command(cmd, check=False)
             if result.returncode != 0:
                 print_error(f"Failed to install Docker: {cmd}")
-                sys.exit(1)
+                return False
+        
+        # Add current user to docker group if not root
+        if 'SUDO_USER' in os.environ:
+            user = os.environ['SUDO_USER']
+            run_command(f"usermod -aG docker {user}")
+            print_warning(f"User {user} added to docker group - logout and login required")
         
         print_success("Docker installed successfully")
-        print_warning("Please log out and back in to use Docker without sudo")
+        return True
         
     else:
         print_error(f"Please install Docker manually for {system}")
-        print("Visit: https://docs.docker.com/get-docker/")
-        sys.exit(1)
+        print_info("Visit: https://docs.docker.com/get-docker/")
+        return False
 
-def install_docker_compose():
+def install_docker_compose() -> bool:
     """Install Docker Compose"""
     system = platform.system().lower()
     
     if system == "linux":
         print_step("Installing Docker Compose...")
-        cmd = 'sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose'
-        run_command(cmd)
-        run_command("sudo chmod +x /usr/local/bin/docker-compose")
+        
+        # Modern Docker installations include compose as a plugin
+        result = run_command("docker compose version", check=False)
+        if result.returncode == 0:
+            print_success("Docker Compose already available")
+            return True
+        
+        # Install compose plugin
+        result = run_command("apt-get update && apt-get install -y docker-compose-plugin", check=False)
+        if result.returncode == 0:
+            print_success("Docker Compose plugin installed")
+            return True
+        
+        print_warning("Could not install Docker Compose plugin, trying standalone...")
+        
+        # Fallback to standalone installation
+        arch = platform.machine()
+        if arch == "x86_64":
+            arch = "x86_64"
+        elif arch == "aarch64":
+            arch = "aarch64"
+        else:
+            print_error(f"Unsupported architecture: {arch}")
+            return False
+        
+        compose_url = f"https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{arch}"
+        cmd = f'curl -L "{compose_url}" -o /usr/local/bin/docker-compose'
+        
+        result = run_command(cmd, check=False)
+        if result.returncode != 0:
+            print_error("Failed to download Docker Compose")
+            return False
+        
+        run_command("chmod +x /usr/local/bin/docker-compose")
         print_success("Docker Compose installed")
+        return True
     else:
         print_warning("Docker Compose should be included with Docker Desktop")
+        return True
 
-def get_server_ip():
-    """Get the server's IP address"""
+def get_server_ip() -> str:
+    """Get the server's external IP address"""
     try:
-        # Connect to a remote server to determine local IP
+        # Try to get external IP
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-        return ip
-    except Exception:
+            local_ip = s.getsockname()[0]
+        
+        # Check if it's a private IP and try to get public IP
+        if local_ip.startswith(('192.168.', '10.', '172.')):
+            try:
+                import urllib.request
+                with urllib.request.urlopen('https://api.ipify.org', timeout=10) as response:
+                    public_ip = response.read().decode().strip()
+                    print_info(f"Detected public IP: {public_ip}")
+                    return public_ip
+            except:
+                print_warning("Could not determine public IP, using local IP")
+        
+        return local_ip
+    except Exception as e:
+        print_warning(f"Could not determine IP address: {e}")
         return "localhost"
 
-def load_env_config(env_file):
+def load_env_config(env_file: str) -> Dict[str, str]:
     """Load environment variables from .env file"""
     config = {}
     
     try:
-        with open(env_file, 'r') as f:
-            for line in f:
+        with open(env_file, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
                 line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    # Remove quotes if present
-                    value = value.strip('"\'')
-                    config[key] = value
+                
+                # Skip empty lines and comments
+                if not line or line.startswith('#'):
+                    continue
+                
+                # Handle lines with =
+                if '=' not in line:
+                    print_warning(f"Invalid line {line_num} in {env_file}: {line}")
+                    continue
+                
+                # Split on first = only
+                key, value = line.split('=', 1)
+                key = key.strip()
+                value = value.strip()
+                
+                # Remove quotes if present
+                if value.startswith('"') and value.endswith('"'):
+                    value = value[1:-1]
+                elif value.startswith("'") and value.endswith("'"):
+                    value = value[1:-1]
+                
+                config[key] = value
+                
+        print_success(f"Loaded {len(config)} configuration variables")
         return config
+        
     except Exception as e:
         print_error(f"Failed to load {env_file}: {e}")
         sys.exit(1)
 
-def update_env_config(config):
+def validate_config(config: Dict[str, str]) -> bool:
+    """Validate essential configuration parameters"""
+    print_step("Validating configuration...")
+    
+    required_fields = ['INSTALL_FOLDER_NAME']
+    missing_fields = [field for field in required_fields if not config.get(field)]
+    
+    if missing_fields:
+        print_error(f"Missing required configuration: {', '.join(missing_fields)}")
+        return False
+    
+    # Check for AI provider configuration
+    ai_providers = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'WITH_EZLOCALAI']
+    has_ai_provider = any(config.get(provider) for provider in ai_providers)
+    
+    if not has_ai_provider and config.get('WITH_EZLOCALAI', '').lower() != 'true':
+        print_warning("No AI provider configured - AGiXT will have limited functionality")
+        print_info("Consider setting OPENAI_API_KEY, ANTHROPIC_API_KEY, or enabling WITH_EZLOCALAI")
+    
+    # Check SMTP configuration for email login
+    smtp_fields = ['SMTP_SERVER', 'SMTP_USER', 'SMTP_PASSWORD']
+    has_smtp = all(config.get(field) for field in smtp_fields)
+    
+    if not has_smtp:
+        print_warning("SMTP not configured - email login will not work")
+        print_info("Configure SMTP_SERVER, SMTP_USER, and SMTP_PASSWORD for email authentication")
+    
+    print_success("Configuration validation complete")
+    return True
+
+def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
     """Update configuration with server-specific values"""
     print_step("Updating configuration for this server...")
     
     # Get server IP
     server_ip = get_server_ip()
-    print(f"🌐 Detected server IP: {server_ip}")
+    print_info(f"Server IP: {server_ip}")
     
-    # Update URLs if they're set to localhost
-    if config.get('AGIXT_URI', '').startswith('http://localhost'):
-        config['AGIXT_URI'] = f"http://{server_ip}:{config.get('AGIXT_PORT', '7437')}"
+    # Update URLs based on detected IP and configured ports
+    agixt_port = config.get('AGIXT_PORT', '7437')
+    interactive_port = config.get('AGIXT_INTERACTIVE_PORT', '3437')
     
-    if config.get('APP_URI', '').startswith('http://localhost'):
-        config['APP_URI'] = f"http://{server_ip}:{config.get('AGIXT_INTERACTIVE_PORT', '3437')}"
+    # Update AGIXT_URI if it's localhost or not set
+    current_uri = config.get('AGIXT_URI', '')
+    if not current_uri or 'localhost' in current_uri:
+        config['AGIXT_URI'] = f"http://{server_ip}:{agixt_port}"
+        print_info(f"Updated AGIXT_URI: {config['AGIXT_URI']}")
     
-    # Generate API key if not set
-    if not config.get('AGIXT_API_KEY'):
-        import secrets
+    # Update APP_URI if it's localhost or not set
+    current_app_uri = config.get('APP_URI', '')
+    if not current_app_uri or 'localhost' in current_app_uri:
+        config['APP_URI'] = f"http://{server_ip}:{interactive_port}"
+        print_info(f"Updated APP_URI: {config['APP_URI']}")
+    
+    # Ensure AGIXT_SERVER_INTERNAL is set for docker networking
+    config['AGIXT_SERVER_INTERNAL'] = "http://agixt:7437"
+    
+    # Generate secure API key if not set or using default
+    current_api_key = config.get('AGIXT_API_KEY', '')
+    if not current_api_key or current_api_key == 'None':
         config['AGIXT_API_KEY'] = secrets.token_hex(32)
         print_success("Generated secure API key")
     
-    # Set working directory
+    # Remove NEXT_PUBLIC_AGIXT_API_KEY if present (security vulnerability)
+    if 'NEXT_PUBLIC_AGIXT_API_KEY' in config:
+        del config['NEXT_PUBLIC_AGIXT_API_KEY']
+        print_warning("Removed NEXT_PUBLIC_AGIXT_API_KEY (security vulnerability - exposes API key to browser)")
+    
+    # Set working directory relative to installation
     install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
     config['WORKING_DIRECTORY'] = f"./{install_folder}/WORKSPACE"
     
+    # Set reasonable defaults for performance
+    if not config.get('UVICORN_WORKERS'):
+        import multiprocessing
+        config['UVICORN_WORKERS'] = str(min(6, multiprocessing.cpu_count()))
+    
+    print_success("Configuration updated successfully")
     return config
 
-def create_env_file(config, folder_path):
-    """Create .env file in the installation folder"""
-    env_file = os.path.join(folder_path, '.env')
+def create_installation_directory(config: Dict[str, str]) -> str:
+    """Create and prepare the installation directory"""
+    install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
     
-    print_step(f"Creating .env file at {env_file}")
+    # Use /var/apps as base path, but fall back to user home if permission denied
+    base_paths = [DEFAULT_BASE_PATH, os.path.expanduser("~/agixt-installations")]
     
-    with open(env_file, 'w') as f:
-        f.write("# AGiXT Configuration\n")
-        f.write(f"# Generated on: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-        
-        for key, value in config.items():
-            f.write(f'{key}="{value}"\n')
+    for base_path in base_paths:
+        try:
+            install_path = os.path.join(base_path, install_folder)
+            print_step(f"Creating installation directory: {install_path}")
+            
+            # Create base directory if it doesn't exist
+            os.makedirs(base_path, exist_ok=True)
+            
+            if os.path.exists(install_path):
+                print_warning(f"Directory {install_path} already exists")
+                response = input("Continue? This will update the existing installation (y/N): ").strip().lower()
+                if response != 'y':
+                    print_info("Installation cancelled by user")
+                    sys.exit(0)
+            else:
+                os.makedirs(install_path, exist_ok=True)
+                print_success(f"Created directory: {install_path}")
+            
+            # Test write permissions
+            test_file = os.path.join(install_path, '.test_write')
+            try:
+                with open(test_file, 'w') as f:
+                    f.write('test')
+                os.remove(test_file)
+                print_success(f"Write permissions confirmed: {install_path}")
+                return install_path
+            except Exception as e:
+                print_warning(f"No write permission to {install_path}: {e}")
+                continue
+                
+        except PermissionError:
+            print_warning(f"Cannot create directory in {base_path} - permission denied")
+            continue
+        except Exception as e:
+            print_warning(f"Failed to create directory in {base_path}: {e}")
+            continue
     
-    # Secure the file
-    os.chmod(env_file, 0o600)
-    print_success("Created and secured .env file")
+    print_error("Could not create installation directory in any location")
+    print_info("Try running with sudo or ensure you have write permissions")
+    sys.exit(1)
 
-def patch_magical_auth(folder_path):
-    """Apply SMTP patches to MagicalAuth.py"""
-    print_step("Applying SMTP patches to MagicalAuth.py...")
+def clone_agixt_repository(install_path: str, branch: str = "stable") -> bool:
+    """Clone or update the AGiXT repository"""
+    print_step("Setting up AGiXT repository...")
     
-    magical_auth_path = os.path.join(folder_path, 'agixt', 'MagicalAuth.py')
+    git_path = os.path.join(install_path, '.git')
     
-    if not os.path.exists(magical_auth_path):
-        print_warning("MagicalAuth.py not found - skipping SMTP patch")
-        return
+    if os.path.exists(git_path):
+        print_info("Repository exists, updating...")
+        
+        # Fetch latest changes
+        result = run_command("git fetch origin", cwd=install_path, check=False)
+        if result.returncode != 0:
+            print_warning("Failed to fetch updates, continuing with existing version")
+            return True
+        
+        # Reset to latest branch
+        run_command(f"git checkout {branch}", cwd=install_path, check=False)
+        run_command(f"git reset --hard origin/{branch}", cwd=install_path, check=False)
+        print_success("Repository updated")
+        
+    else:
+        print_info(f"Cloning AGiXT repository (branch: {branch})...")
+        
+        # Clone the repository
+        clone_cmd = f"git clone --branch {branch} --depth 1 {AGIXT_REPO} ."
+        result = run_command(clone_cmd, cwd=install_path, check=False)
+        
+        if result.returncode != 0:
+            print_warning(f"Failed to clone {branch} branch, trying main...")
+            clone_cmd = f"git clone --branch main --depth 1 {AGIXT_REPO} ."
+            result = run_command(clone_cmd, cwd=install_path)
+        
+        print_success("Repository cloned successfully")
     
-    # Create backup
-    backup_path = f"{magical_auth_path}.backup"
-    run_command(f"cp '{magical_auth_path}' '{backup_path}'")
-    print_success(f"Backup created: {backup_path}")
+    return True
+
+def create_env_file(config: Dict[str, str], install_path: str) -> str:
+    """Create .env file in the installation directory"""
+    env_file = os.path.join(install_path, '.env')
+    
+    print_step(f"Creating .env file: {env_file}")
     
     try:
-        with open(magical_auth_path, 'r') as f:
-            content = f.read()
+        with open(env_file, 'w', encoding='utf-8') as f:
+            f.write("# AGiXT Configuration\n")
+            f.write(f"# Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"# Installation: {install_path}\n\n")
+            
+            # Group related configurations
+            sections = {
+                'Core Settings': ['INSTALL_FOLDER_NAME', 'SERVER_TYPE', 'AGIXT_API_KEY'],
+                'Network & URLs': ['AGIXT_URI', 'APP_URI', 'AUTH_WEB', 'ALLOWED_DOMAINS'],
+                'Authentication': ['SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_USE_TLS', 'FROM_EMAIL'],
+                'AI Providers': ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'WITH_EZLOCALAI'],
+                'System Settings': ['DATABASE_TYPE', 'DATABASE_NAME', 'UVICORN_WORKERS', 'LOG_LEVEL', 'WORKING_DIRECTORY']
+            }
+            
+            # Write sections
+            written_keys = set()
+            for section_name, keys in sections.items():
+                section_keys = [k for k in keys if k in config and k not in written_keys]
+                if section_keys:
+                    f.write(f"\n# {section_name}\n")
+                    for key in section_keys:
+                        f.write(f'{key}="{config[key]}"\n')
+                        written_keys.add(key)
+            
+            # Write remaining keys
+            remaining_keys = [k for k in sorted(config.keys()) if k not in written_keys]
+            if remaining_keys:
+                f.write(f"\n# Additional Settings\n")
+                for key in remaining_keys:
+                    f.write(f'{key}="{config[key]}"\n')
         
-        # Add SMTP imports
-        smtp_imports = """import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart"""
-        
-        if "import smtplib" not in content:
-            # Find insertion point after existing imports
-            lines = content.split('\n')
-            insert_index = 0
-            for i, line in enumerate(lines):
-                if line.startswith(('import ', 'from ')) and not line.strip().startswith('#'):
-                    insert_index = i + 1
-            
-            lines.insert(insert_index, smtp_imports)
-            content = '\n'.join(lines)
-        
-        # Add SMTP email method (simplified version)
-        smtp_method = '''
-    def send_email(self, to_email: str, subject: str, body: str, is_html: bool = True) -> bool:
-        """Send email using SMTP - supports any email provider"""
-        try:
-            smtp_server = getenv("SMTP_SERVER")
-            smtp_port = int(getenv("SMTP_PORT", "587"))
-            smtp_user = getenv("SMTP_USER")
-            smtp_password = getenv("SMTP_PASSWORD")
-            smtp_use_tls = getenv("SMTP_USE_TLS", "true").lower() == "true"
-            from_email = getenv("FROM_EMAIL", smtp_user)
-            
-            if not all([smtp_server, smtp_user, smtp_password]):
-                logging.error("SMTP configuration incomplete")
-                return False
-                
-            msg = MIMEMultipart('alternative')
-            msg['From'] = from_email
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            
-            if is_html:
-                msg.attach(MIMEText(body, 'html', 'utf-8'))
-            else:
-                msg.attach(MIMEText(body, 'plain', 'utf-8'))
-            
-            if smtp_port == 465:
-                server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-            else:
-                server = smtplib.SMTP(smtp_server, smtp_port)
-                if smtp_use_tls:
-                    server.starttls()
-            
-            server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, to_email, msg.as_string())
-            server.quit()
-            
-            logging.info(f"Email sent successfully to {to_email}")
-            return True
-            
-        except Exception as e:
-            logging.error(f"Failed to send email: {str(e)}")
-            return False
-'''
-        
-        # Replace or add send_email method
-        if "def send_email(" in content:
-            # Replace existing method (simplified regex)
-            content = re.sub(
-                r'def send_email\(.*?\n(?:.*?\n)*?.*?return.*?\n',
-                smtp_method.strip() + '\n',
-                content,
-                flags=re.MULTILINE | re.DOTALL
-            )
-        else:
-            # Add method to MagicalAuth class
-            class_pattern = r'(class MagicalAuth:.*?\n)'
-            content = re.sub(class_pattern, r'\1' + smtp_method, content, flags=re.MULTILINE | re.DOTALL)
-        
-        # Write patched file
-        with open(magical_auth_path, 'w') as f:
-            f.write(content)
-        
-        print_success("SMTP patches applied successfully")
+        # Secure the file
+        os.chmod(env_file, 0o600)
+        print_success("Environment file created and secured")
+        return env_file
         
     except Exception as e:
-        print_error(f"Failed to patch MagicalAuth.py: {e}")
-        # Restore backup
-        if os.path.exists(backup_path):
-            run_command(f"cp '{backup_path}' '{magical_auth_path}'")
-        print_warning("Restored original file")
+        print_error(f"Failed to create .env file: {e}")
+        sys.exit(1)
 
-def start_agixt(folder_path):
-    """Start AGiXT using Docker Compose"""
-    print_step("Starting AGiXT containers...")
+def start_agixt_services(install_path: str, server_type: str = "stable") -> bool:
+    """Start AGiXT services using Docker Compose"""
+    print_step("Starting AGiXT services...")
     
     # Change to installation directory
-    os.chdir(folder_path)
+    original_cwd = os.getcwd()
+    os.chdir(install_path)
     
-    # Stop any existing containers
-    run_command("docker compose down", check=False)
-    
-    # Pull latest images and start
-    run_command("docker compose pull")
-    run_command("docker compose up -d")
-    
-    print_success("AGiXT containers started successfully!")
+    try:
+        # Stop any existing containers
+        print_info("Stopping existing containers...")
+        run_command("docker compose down", check=False, capture_output=False)
+        
+        # Choose appropriate compose file
+        compose_file = "docker-compose.yml"
+        if server_type == "dev":
+            compose_file = "docker-compose-dev.yml"
+            if not os.path.exists(compose_file):
+                print_warning(f"{compose_file} not found, using default")
+                compose_file = "docker-compose.yml"
+        
+        print_info(f"Using compose file: {compose_file}")
+        
+        # Pull latest images
+        print_info("Pulling Docker images...")
+        result = run_command(f"docker compose -f {compose_file} pull", check=False, capture_output=False)
+        if result.returncode != 0:
+            print_warning("Failed to pull some images, continuing...")
+        
+        # Start services
+        print_info("Starting services...")
+        result = run_command(f"docker compose -f {compose_file} up -d", capture_output=False)
+        
+        if result.returncode == 0:
+            print_success("AGiXT services started successfully!")
+            return True
+        else:
+            print_error("Failed to start AGiXT services")
+            return False
+            
+    finally:
+        # Restore original working directory
+        os.chdir(original_cwd)
 
-def wait_for_services(config):
-    """Wait for services to be ready"""
-    print_step("Waiting for services to start...")
+def wait_for_services(config: Dict[str, str], timeout: int = 120) -> Tuple[str, str]:
+    """Wait for services to be ready and return URLs"""
+    print_step("Waiting for services to be ready...")
     
     api_url = config.get('AGIXT_URI', 'http://localhost:7437')
     web_url = config.get('APP_URI', 'http://localhost:3437')
     
-    # Wait up to 2 minutes for services
-    for i in range(24):  # 24 * 5 seconds = 2 minutes
-        try:
-            # Check API health
-            urllib.request.urlopen(f"{api_url}/health", timeout=5)
-            print_success("API service is ready!")
-            break
-        except:
-            if i < 23:
-                print(f"⏳ Waiting for services... ({i+1}/24)")
-                time.sleep(5)
-            else:
-                print_warning("Services may still be starting up")
+    # Health check endpoints
+    health_endpoints = [
+        (api_url, "API"),
+        (web_url, "Web Interface")
+    ]
+    
+    start_time = time.time()
+    check_interval = 5
+    
+    for endpoint_url, service_name in health_endpoints:
+        print_info(f"Checking {service_name} at {endpoint_url}")
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Try to connect to the service
+                import urllib.request
+                req = urllib.request.Request(endpoint_url, headers={'User-Agent': 'AGiXT-Health-Check'})
+                with urllib.request.urlopen(req, timeout=5) as response:
+                    if response.status < 400:
+                        print_success(f"{service_name} is ready!")
+                        break
+            except Exception as e:
+                elapsed = int(time.time() - start_time)
+                remaining = timeout - elapsed
+                print(f"⏳ {service_name} not ready yet... ({elapsed}s elapsed, {remaining}s remaining)")
+                
+                if remaining <= 0:
+                    print_warning(f"{service_name} did not become ready within {timeout}s")
+                    break
+                    
+                time.sleep(check_interval)
     
     return api_url, web_url
 
+def show_installation_summary(install_path: str, config: Dict[str, str], api_url: str, web_url: str):
+    """Display installation summary and next steps"""
+    print("\n" + "="*70)
+    print(f"{Colors.GREEN}{Colors.BOLD}🎉 AGiXT Installation Complete!{Colors.END}")
+    print("="*70)
+    
+    print(f"\n📁 {Colors.BOLD}Installation Details:{Colors.END}")
+    print(f"   Location: {install_path}")
+    print(f"   Type: {config.get('SERVER_TYPE', 'production')}")
+    print(f"   Branch: {config.get('AGIXT_BRANCH', 'stable')}")
+    
+    print(f"\n🌐 {Colors.BOLD}Service URLs:{Colors.END}")
+    print(f"   Web Interface: {Colors.CYAN}{web_url}{Colors.END}")
+    print(f"   API Endpoint:  {Colors.CYAN}{api_url}{Colors.END}")
+    print(f"   Management:    {Colors.CYAN}{web_url.replace(':3437', ':8501')}{Colors.END}")
+    
+    # Authentication info
+    smtp_configured = all(config.get(field) for field in ['SMTP_SERVER', 'SMTP_USER', 'SMTP_PASSWORD'])
+    if smtp_configured:
+        print(f"\n📧 {Colors.BOLD}Email Authentication:{Colors.END}")
+        print(f"   SMTP Server: {config.get('SMTP_SERVER')}")
+        print(f"   From Email:  {config.get('FROM_EMAIL', config.get('SMTP_USER'))}")
+    else:
+        print(f"\n📧 {Colors.YELLOW}Email Authentication: Not configured{Colors.END}")
+    
+    # AI Providers
+    providers = []
+    if config.get('OPENAI_API_KEY'): providers.append('OpenAI')
+    if config.get('ANTHROPIC_API_KEY'): providers.append('Anthropic')
+    if config.get('GOOGLE_API_KEY'): providers.append('Google')
+    if config.get('WITH_EZLOCALAI', '').lower() == 'true': providers.append('ezLocalAI')
+    
+    print(f"\n🤖 {Colors.BOLD}AI Providers:{Colors.END}")
+    if providers:
+        print(f"   Configured: {', '.join(providers)}")
+    else:
+        print(f"   {Colors.YELLOW}No AI providers configured{Colors.END}")
+    
+    print(f"\n🚀 {Colors.BOLD}Next Steps:{Colors.END}")
+    print("   1. Open the web interface in your browser")
+    if smtp_configured:
+        print("   2. Login with your email address")
+        print("   3. Check your email for the magic link")
+        print("   4. Start creating agents and conversations!")
+    else:
+        print("   2. Configure SMTP settings for email authentication")
+        print("   3. Configure at least one AI provider")
+        print("   4. Restart services and begin using AGiXT!")
+    
+    print(f"\n💡 {Colors.BOLD}Useful Commands:{Colors.END}")
+    print(f"   View logs:     cd {install_path} && docker compose logs -f")
+    print(f"   Restart:       cd {install_path} && docker compose restart")
+    print(f"   Stop:          cd {install_path} && docker compose down")
+    print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
+
+def cleanup_temp_files(*files):
+    """Clean up temporary files"""
+    for file in files:
+        try:
+            if os.path.exists(file):
+                os.remove(file)
+                print_info(f"Cleaned up: {file}")
+        except Exception as e:
+            print_warning(f"Could not remove {file}: {e}")
+
 def main():
     """Main installation function"""
-    print(f"{Colors.BOLD}🚀 AGiXT Automated Installer{Colors.END}")
-    print("=" * 50)
+    print(f"{Colors.BOLD}{Colors.MAGENTA}")
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print("║                  AGiXT Automated Installer                   ║")
+    print("║                     Enhanced Version 2.0                     ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    print(f"{Colors.END}")
     
     # Parse command line arguments
     if len(sys.argv) < 2:
-        print("Usage: python3 install-agixt.py <config_name> [github_token]")
-        print("Example: python3 install-agixt.py test-server")
-        print("Example: python3 install-agixt.py test-server github_pat_xxxxx")
+        print_error("Missing required argument: CONFIG_NAME")
+        print(f"\n{Colors.BOLD}Usage:{Colors.END}")
+        print("  python3 install-agixt.py <config_name> [github_token]")
+        print(f"\n{Colors.BOLD}Examples:{Colors.END}")
+        print("  python3 install-agixt.py test-server")
+        print("  python3 install-agixt.py prod-config github_pat_xxxxx")
+        print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
+        print("  curl -sSL https://raw.githubusercontent.com/your-repo/main/install-agixt.py | python3 - config_name")
         sys.exit(1)
     
     config_name = sys.argv[1]
     github_token = sys.argv[2] if len(sys.argv) > 2 else None
     
-    # Set token in environment for download_file function to use
+    # Set token in environment for download functions
     if github_token:
         os.environ['GITHUB_TOKEN'] = github_token
-        print_success(f"Using provided GitHub token for private repository access")
+        print_success("GitHub token configured for private repository access")
     
     env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
     env_file = f"{config_name}.env"
     
-    print(f"📋 Configuration: {config_name}")
-    print(f"🌐 Repository: {GITHUB_REPO_BASE}")
+    print_info(f"Configuration: {config_name}")
+    print_info(f"Repository: {GITHUB_REPO_BASE}")
+    print_info(f"Target: {env_url}")
     
-    # Step 1: Check prerequisites
-    check_prerequisites()
-    
-    # Step 2: Download environment configuration
-    print_step(f"Downloading configuration: {config_name}.env")
-    if not download_file(env_url, env_file):
-        print_error(f"Failed to download {env_file}")
-        print("Available configurations should be at:")
-        print(f"  {GITHUB_REPO_BASE}/")
-        sys.exit(1)
-    
-    # Step 3: Load and update configuration
-    config = load_env_config(env_file)
-    config = update_env_config(config)
-    
-    install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
-    print(f"📁 Installation folder: {install_folder}")
-    
-    # Step 4: Create installation directory in /var/apps
-    base_path = "/var/apps"
-    install_path = os.path.join(base_path, install_folder)
-
-    print_step(f"Creating installation directory: {install_path}")
-
-    # Ensure /var/apps exists with proper permissions
     try:
-        os.makedirs(base_path, exist_ok=True)
-    except PermissionError:
-        print_error("Cannot create /var/apps directory. Run with sudo or create manually:")
-        print(f"sudo mkdir -p {base_path}")
-        print(f"sudo chown $USER:$USER {base_path}")
-        sys.exit(1)
-
-    if os.path.exists(install_path):
-        print_warning(f"Directory {install_path} already exists")
-        response = input("Continue? (y/N): ").strip().lower()
-        if response != 'y':
-            print("Installation cancelled")
-            sys.exit(0)
-    else:
-        os.makedirs(install_path, exist_ok=True)
-        print_success(f"Created directory: {install_path}")
-
-    # Update install_folder variable for rest of script
-    install_folder = install_path
-    
-    # Step 5: Clone AGiXT repository
-    print_step("Downloading AGiXT...")
-    if os.path.exists(os.path.join(install_folder, '.git')):
-        print("AGiXT already downloaded, updating...")
-        run_command("git pull", cwd=install_folder)
-    else:
-        run_command(f"git clone {AGIXT_REPO} {install_folder}")
-    print_success("AGiXT downloaded successfully")
-    
-    # Step 6: Apply SMTP patches
-    patch_magical_auth(install_folder)
-    
-    # Step 7: Create .env file
-    create_env_file(config, install_folder)
-    
-    # Step 8: Start AGiXT
-    start_agixt(install_folder)
-    
-    # Step 9: Wait for services and show results
-    api_url, web_url = wait_for_services(config)
-    
-    # Step 10: Show final information
-    print("\n" + "="*60)
-    print(f"{Colors.GREEN}{Colors.BOLD}🎉 AGiXT Installation Complete!{Colors.END}")
-    print("="*60)
-    print(f"📁 Installation: {os.path.abspath(install_folder)}")
-    print(f"🌐 Web Interface: {web_url}")
-    print(f"🔗 API Endpoint: {api_url}")
-    smtp_user = config.get('SMTP_USER', 'Not configured')
-    smtp_server = config.get('SMTP_SERVER', '')
-    if smtp_user != 'Not configured' and smtp_server:
-        print(f"📧 Email Login: {smtp_user} via {smtp_server}")
-    else:
-        print(f"📧 Email Login: {smtp_user}")
-    
-    print("\n🚀 Next Steps:")
-    print("1. Open the web interface in your browser")
-    print("2. Login with your email address")
-    print("3. Check your email for the magic link")
-    print("4. Start creating agents and conversations!")
-    
-    # Clean up
-    if os.path.exists(env_file):
-        os.remove(env_file)
-
-if __name__ == "__main__":
-    try:
-        main()
+        # Step 1: Prerequisites check
+        if not check_prerequisites():
+            print_error("Prerequisites check failed")
+            sys.exit(1)
+        
+        # Step 2: Download configuration
+        print_step(f"Downloading configuration: {config_name}.env")
+        if not download_file(env_url, env_file):
+            print_error(f"Failed to download configuration: {config_name}.env")
+            print_info("Available configurations:")
+            print_info(f"  Check: {GITHUB_REPO_BASE}/")
+            print_info("  Ensure the .env file exists and is accessible")
+            sys.exit(1)
+        
+        # Step 3: Load and validate configuration
+        config = load_env_config(env_file)
+        if not validate_config(config):
+            print_error("Configuration validation failed")
+            sys.exit(1)
+        
+        # Step 4: Update configuration for this server
+        config = update_env_config(config)
+        
+        # Step 5: Create installation directory
+        install_path = create_installation_directory(config)
+        
+        # Step 6: Clone/update AGiXT repository
+        branch = config.get('AGIXT_BRANCH', config.get('SERVER_TYPE', 'stable'))
+        if not clone_agixt_repository(install_path, branch):
+            print_error("Failed to setup AGiXT repository")
+            sys.exit(1)
+        
+        # Step 7: Create environment file
+        env_file_path = create_env_file(config, install_path)
+        
+        # Step 8: Start AGiXT services
+        server_type = config.get('SERVER_TYPE', 'stable')
+        if not start_agixt_services(install_path, server_type):
+            print_error("Failed to start AGiXT services")
+            print_info("Check the logs for more information:")
+            print_info(f"  cd {install_path} && docker compose logs")
+            sys.exit(1)
+        
+        # Step 9: Wait for services to be ready
+        api_url, web_url = wait_for_services(config)
+        
+        # Step 10: Show installation summary
+        show_installation_summary(install_path, config, api_url, web_url)
+        
+        print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
+        
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
         sys.exit(1)
     except Exception as e:
         print_error(f"Installation failed: {e}")
+        import traceback
+        print_error("Full error details:")
+        traceback.print_exc()
         sys.exit(1)
+    finally:
+        # Clean up temporary files
+        cleanup_temp_files(env_file)
+
+if __name__ == "__main__":
+    main()
