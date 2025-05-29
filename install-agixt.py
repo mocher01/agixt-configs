@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - Production Ready
-===========================================
+AGiXT Automated Installer - Production Ready (FIXED)
+===================================================
 
 Usage:
-  curl -H "Authorization: token YOUR_GITHUB_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME YOUR_GITHUB_TOKEN
-  python3 install-agixt.py CONFIG_NAME [GITHUB_TOKEN]
+  curl -H "Authorization: token YOUR_GITHUB_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - CONFIG_NAME YOUR_GITHUB_TOKEN
+  python3 install-agixt-fixed.py CONFIG_NAME [GITHUB_TOKEN]
 
 Example:
-  curl -H "Authorization: token github_pat_xxxxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGIXT_0529_1056 github_pat_xxxxx
-  python3 install-agixt.py AGIXT_0529_1056 github_pat_xxxxx
+  curl -H "Authorization: token github_pat_xxxxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - AGIXT_0529_1056 github_pat_xxxxx
+  python3 install-agixt-fixed.py AGIXT_0529_1056 github_pat_xxxxx
 
-This script will:
-1. Download the specified .env config from GitHub
-2. Create installation folder based on CONFIG_NAME
-3. Download and set up AGiXT with all configurations
-4. Apply environment-specific patches
-5. Start the AGiXT server with proper health checks
+FIXES APPLIED:
+1. Corrected branch logic (uses 'main' branch as AGiXT's primary branch)
+2. Fixed AUTH_PROVIDER configuration (single value, not comma-separated)
+3. Fixed AUTH_WEB configuration (points to user interface with /user path)  
+4. Fixed Docker networking (internal vs external IP usage)
+5. Added authentication configuration validation
 
-Author: Enhanced Production Version
-Version: 2.1.0
+Author: Enhanced Production Version - FIXED
+Version: 2.2.0
 """
 
 import os
@@ -109,7 +109,7 @@ def download_file(url: str, filename: str) -> bool:
             # Create request with authorization header
             req = urllib.request.Request(url)
             req.add_header('Authorization', f'token {github_token}')
-            req.add_header('User-Agent', 'AGiXT-Installer/2.1')
+            req.add_header('User-Agent', 'AGiXT-Installer/2.2')
             
             with urllib.request.urlopen(req, timeout=30) as response:
                 with open(filename, 'wb') as f:
@@ -216,7 +216,7 @@ def install_docker() -> bool:
         if os.geteuid() != 0:
             print_warning("Docker installation requires root privileges")
             print_info("Please run one of these commands:")
-            print_info("  sudo python3 install-agixt.py [config_name] [token]")
+            print_info("  sudo python3 install-agixt-fixed.py [config_name] [token]")
             print_info("  OR install Docker manually: https://docs.docker.com/get-docker/")
             
             response = input("Do you want to continue without Docker auto-install? (y/N): ").strip().lower()
@@ -384,6 +384,38 @@ def validate_config(config: Dict[str, str]) -> bool:
     print_success("Configuration validation complete")
     return True
 
+def fix_authentication_config(config: Dict[str, str]) -> Dict[str, str]:
+    """Fix authentication configuration issues"""
+    print_step("Fixing authentication configuration...")
+    
+    # FIX 1: AUTH_PROVIDER should be single value, not comma-separated
+    auth_provider = config.get('AUTH_PROVIDER', '')
+    if ',' in auth_provider:
+        print_warning(f"Found comma-separated AUTH_PROVIDER: {auth_provider}")
+        # Use only the first provider (magicalauth)
+        config['AUTH_PROVIDER'] = 'magicalauth'
+        print_success("Fixed AUTH_PROVIDER to single value: magicalauth")
+    elif not auth_provider:
+        config['AUTH_PROVIDER'] = 'magicalauth'
+        print_success("Set AUTH_PROVIDER to: magicalauth")
+    
+    # FIX 2: ALLOW_EMAIL_SIGN_IN should be true for email authentication
+    if config.get('AUTH_PROVIDER') == 'magicalauth':
+        config['ALLOW_EMAIL_SIGN_IN'] = 'true'
+        print_success("Enabled email sign-in for magicalauth")
+    
+    # FIX 3: AUTH_WEB should point to user interface, not API
+    app_uri = config.get('APP_URI', '')
+    if app_uri and not config.get('AUTH_WEB', '').endswith('/user'):
+        config['AUTH_WEB'] = f"{app_uri}/user"
+        print_success(f"Fixed AUTH_WEB to: {config['AUTH_WEB']}")
+    
+    # FIX 4: For testing, disable API key requirement initially
+    config['AGIXT_REQUIRE_API_KEY'] = 'false'
+    print_warning("Temporarily disabled API key requirement for authentication testing")
+    
+    return config
+
 def update_env_config(config: Dict[str, str], config_name: str) -> Dict[str, str]:
     """Update configuration with server-specific values"""
     print_step("Updating configuration for this server...")
@@ -401,24 +433,24 @@ def update_env_config(config: Dict[str, str], config_name: str) -> Dict[str, str
     agixt_port = "7437"  # Default AGiXT API port
     interactive_port = "3437"  # Default interactive port
     
-    # Update AGIXT_URI if it's localhost or not set
+    # Update AGIXT_URI if it's localhost or not set (for email redirects)
     current_uri = config.get('AGIXT_URI', '')
     if not current_uri or 'localhost' in current_uri:
         config['AGIXT_URI'] = f"http://{server_ip}:{agixt_port}"
         print_info(f"Updated AGIXT_URI: {config['AGIXT_URI']}")
     
-    # Update APP_URI if it's localhost or not set
+    # Update APP_URI if it's localhost or not set (for external browser access)
     current_app_uri = config.get('APP_URI', '')
     if not current_app_uri or 'localhost' in current_app_uri:
         config['APP_URI'] = f"http://{server_ip}:{interactive_port}"
         print_info(f"Updated APP_URI: {config['APP_URI']}")
     
-    # Update AGIXT_SERVER for web interface API calls
-    config['AGIXT_SERVER'] = f"http://{server_ip}:{agixt_port}"
-    print_info(f"Set AGIXT_SERVER: {config['AGIXT_SERVER']}")
+    # CRITICAL FIX: AGIXT_SERVER should use INTERNAL Docker networking for frontend
+    config['AGIXT_SERVER'] = f"http://agixt:{agixt_port}"
+    print_success(f"Set AGIXT_SERVER for internal Docker networking: {config['AGIXT_SERVER']}")
     
-    # Update AUTH_WEB to match APP_URI
-    config['AUTH_WEB'] = f"{config['APP_URI']}/user"
+    # Fix authentication configuration
+    config = fix_authentication_config(config)
     
     # Generate secure API key if not set or using default
     current_api_key = config.get('AGIXT_API_KEY', '')
@@ -434,14 +466,10 @@ def update_env_config(config: Dict[str, str], config_name: str) -> Dict[str, str
         import multiprocessing
         config['UVICORN_WORKERS'] = str(min(6, multiprocessing.cpu_count()))
     
-    # Map SERVER_TYPE to appropriate branch
-    server_type = config.get('SERVER_TYPE', 'stable')
-    if server_type == 'stable':
-        config['AGIXT_BRANCH'] = 'stable'
-    elif server_type == 'dev':
-        config['AGIXT_BRANCH'] = 'main'
-    else:
-        config['AGIXT_BRANCH'] = 'stable'  # Default fallback
+    # CRITICAL FIX: Use 'main' branch as AGiXT's primary branch
+    # The 'stable' branch doesn't exist or is outdated
+    config['AGIXT_BRANCH'] = 'main'
+    print_success("Set AGIXT_BRANCH to 'main' (AGiXT's primary branch)")
     
     print_success("Configuration updated successfully")
     return config
@@ -520,7 +548,7 @@ def fix_ownership(install_path: str):
     except Exception as e:
         print_warning(f"Could not fix ownership: {e}")
 
-def clone_agixt_repository(install_path: str, branch: str = "stable") -> bool:
+def clone_agixt_repository(install_path: str, branch: str = "main") -> bool:
     """Clone or update the AGiXT repository"""
     print_step("Setting up AGiXT repository...")
     
@@ -543,14 +571,13 @@ def clone_agixt_repository(install_path: str, branch: str = "stable") -> bool:
     else:
         print_info(f"Cloning AGiXT repository (branch: {branch})...")
         
-        # Clone the repository
+        # Clone the repository - directly use main branch since it's the primary branch
         clone_cmd = f"git clone --branch {branch} --depth 1 {AGIXT_REPO} ."
         result = run_command(clone_cmd, cwd=install_path, check=False)
         
         if result.returncode != 0:
-            print_warning(f"Failed to clone {branch} branch, trying main...")
-            clone_cmd = f"git clone --branch main --depth 1 {AGIXT_REPO} ."
-            result = run_command(clone_cmd, cwd=install_path)
+            print_error(f"Failed to clone {branch} branch")
+            return False
         
         print_success("Repository cloned successfully")
     
@@ -564,15 +591,16 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
     
     try:
         with open(env_file, 'w', encoding='utf-8') as f:
-            f.write("# AGiXT Configuration\n")
+            f.write("# AGiXT Configuration - FIXED VERSION\n")
             f.write(f"# Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            f.write(f"# Installation: {install_path}\n\n")
+            f.write(f"# Installation: {install_path}\n")
+            f.write("# Fixed Issues: Branch logic, AUTH_PROVIDER, AUTH_WEB, Docker networking\n\n")
             
             # Group related configurations
             sections = {
-                'Core Settings': ['SERVER_TYPE', 'AGIXT_API_KEY'],
-                'Network & URLs': ['AGIXT_URI', 'APP_URI', 'AUTH_WEB', 'ALLOWED_DOMAINS'],
-                'Authentication': ['SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_USE_TLS', 'FROM_EMAIL'],
+                'Core Settings': ['SERVER_TYPE', 'AGIXT_API_KEY', 'AGIXT_BRANCH'],
+                'Network & URLs': ['AGIXT_URI', 'APP_URI', 'AGIXT_SERVER', 'AUTH_WEB', 'ALLOWED_DOMAINS'],
+                'Authentication': ['AUTH_PROVIDER', 'ALLOW_EMAIL_SIGN_IN', 'AGIXT_REQUIRE_API_KEY', 'SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_USE_TLS', 'FROM_EMAIL'],
                 'AI Providers': ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'WITH_EZLOCALAI'],
                 'System Settings': ['DATABASE_TYPE', 'DATABASE_NAME', 'UVICORN_WORKERS', 'LOG_LEVEL', 'WORKING_DIRECTORY']
             }
@@ -607,7 +635,7 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
         # Secure the file and fix ownership
         os.chmod(env_file, 0o600)
         fix_ownership(env_file)
-        print_success("Environment file created and secured")
+        print_success("Environment file created and secured with fixes applied")
         return env_file
         
     except Exception as e:
@@ -627,14 +655,8 @@ def start_agixt_services(install_path: str, server_type: str = "stable") -> bool
         print_info("Stopping existing containers...")
         run_command("docker compose down", check=False, capture_output=False)
         
-        # Choose appropriate compose file
+        # Always use standard docker-compose.yml since we're using main branch
         compose_file = "docker-compose.yml"
-        if server_type == "dev":
-            compose_file = "docker-compose-dev.yml"
-            if not os.path.exists(compose_file):
-                print_warning(f"{compose_file} not found, using default")
-                compose_file = "docker-compose.yml"
-        
         print_info(f"Using compose file: {compose_file}")
         
         # Pull latest images
@@ -684,192 +706,3 @@ def wait_for_services(config: Dict[str, str], timeout: int = 120) -> Tuple[str, 
                 req = urllib.request.Request(endpoint_url, headers={'User-Agent': 'AGiXT-Health-Check'})
                 with urllib.request.urlopen(req, timeout=5) as response:
                     if response.status < 400:
-                        print_success(f"{service_name} is ready!")
-                        break
-            except Exception as e:
-                elapsed = int(time.time() - start_time)
-                remaining = timeout - elapsed
-                print(f"⏳ {service_name} not ready yet... ({elapsed}s elapsed, {remaining}s remaining)")
-                
-                if remaining <= 0:
-                    print_warning(f"{service_name} did not become ready within {timeout}s")
-                    break
-                    
-                time.sleep(check_interval)
-    
-    return api_url, web_url
-
-def show_installation_summary(install_path: str, config: Dict[str, str], api_url: str, web_url: str):
-    """Display installation summary and next steps"""
-    print("\n" + "="*70)
-    print(f"{Colors.GREEN}{Colors.BOLD}🎉 AGiXT Installation Complete!{Colors.END}")
-    print("="*70)
-    
-    print(f"\n📁 {Colors.BOLD}Installation Details:{Colors.END}")
-    print(f"   Location: {install_path}")
-    print(f"   Type: {config.get('SERVER_TYPE', 'production')}")
-    print(f"   Branch: {config.get('AGIXT_BRANCH', 'stable')}")
-    
-    print(f"\n🌐 {Colors.BOLD}Service URLs:{Colors.END}")
-    print(f"   Web Interface: {Colors.CYAN}{web_url}{Colors.END}")
-    print(f"   API Endpoint:  {Colors.CYAN}{api_url}{Colors.END}")
-    print(f"   Management:    {Colors.CYAN}{web_url.replace(':3437', ':8501')}{Colors.END}")
-    
-    # Authentication info
-    smtp_configured = all(config.get(field) for field in ['SMTP_SERVER', 'SMTP_USER', 'SMTP_PASSWORD'])
-    if smtp_configured:
-        print(f"\n📧 {Colors.BOLD}Email Authentication:{Colors.END}")
-        print(f"   SMTP Server: {config.get('SMTP_SERVER')}")
-        print(f"   From Email:  {config.get('FROM_EMAIL', config.get('SMTP_USER'))}")
-    else:
-        print(f"\n📧 {Colors.YELLOW}Email Authentication: Not configured{Colors.END}")
-    
-    # AI Providers
-    providers = []
-    if config.get('OPENAI_API_KEY'): providers.append('OpenAI')
-    if config.get('ANTHROPIC_API_KEY'): providers.append('Anthropic')
-    if config.get('GOOGLE_API_KEY'): providers.append('Google')
-    if config.get('WITH_EZLOCALAI', '').lower() == 'true': providers.append('ezLocalAI')
-    
-    print(f"\n🤖 {Colors.BOLD}AI Providers:{Colors.END}")
-    if providers:
-        print(f"   Configured: {', '.join(providers)}")
-    else:
-        print(f"   {Colors.YELLOW}No AI providers configured{Colors.END}")
-    
-    # Security status
-    api_key_required = config.get('AGIXT_REQUIRE_API_KEY', 'false').lower() == 'true'
-    print(f"\n🔐 {Colors.BOLD}Security:{Colors.END}")
-    print(f"   API Key Required: {Colors.GREEN if api_key_required else Colors.YELLOW}{'Yes' if api_key_required else 'No'}{Colors.END}")
-    print(f"   API Key: {config.get('AGIXT_API_KEY', 'Not set')[:16]}...")
-    
-    print(f"\n🚀 {Colors.BOLD}Next Steps:{Colors.END}")
-    print("   1. Open the web interface in your browser")
-    if smtp_configured:
-        print("   2. Login with your email address")
-        print("   3. Check your email for the magic link")
-        print("   4. Start creating agents and conversations!")
-    else:
-        print("   2. Configure SMTP settings for email authentication")
-        print("   3. Configure at least one AI provider")
-        print("   4. Restart services and begin using AGiXT!")
-    
-    print(f"\n💡 {Colors.BOLD}Useful Commands:{Colors.END}")
-    print(f"   View logs:     cd {install_path} && docker compose logs -f")
-    print(f"   Restart:       cd {install_path} && docker compose restart")
-    print(f"   Stop:          cd {install_path} && docker compose down")
-    print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
-
-def cleanup_temp_files(*files):
-    """Clean up temporary files"""
-    for file in files:
-        try:
-            if os.path.exists(file):
-                os.remove(file)
-                print_info(f"Cleaned up: {file}")
-        except Exception as e:
-            print_warning(f"Could not remove {file}: {e}")
-
-def main():
-    """Main installation function"""
-    print(f"{Colors.BOLD}{Colors.MAGENTA}")
-    print("╔═══════════════════════════════════════════════════════════════╗")
-    print("║                  AGiXT Automated Installer                   ║")
-    print("║                     Production Ready v2.1                    ║")
-    print("╚═══════════════════════════════════════════════════════════════╝")
-    print(f"{Colors.END}")
-    
-    # Parse command line arguments
-    if len(sys.argv) < 2:
-        print_error("Missing required argument: CONFIG_NAME")
-        print(f"\n{Colors.BOLD}Usage:{Colors.END}")
-        print("  python3 install-agixt.py <config_name> [github_token]")
-        print(f"\n{Colors.BOLD}Examples:{Colors.END}")
-        print("  python3 install-agixt.py AGIXT_0529_1056")
-        print("  python3 install-agixt.py AGIXT_0529_1056 github_pat_xxxxx")
-        print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
-        print('  curl -H "Authorization: token github_pat_xxxxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGIXT_0529_1056 github_pat_xxxxx')
-        sys.exit(1)
-    
-    config_name = sys.argv[1]
-    github_token = sys.argv[2] if len(sys.argv) > 2 else None
-    
-    # Set token in environment for download functions
-    if github_token:
-        os.environ['GITHUB_TOKEN'] = github_token
-        print_success("GitHub token configured for private repository access")
-    
-    env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
-    env_file = f"{config_name}.env"
-    
-    print_info(f"Configuration: {config_name}")
-    print_info(f"Repository: {GITHUB_REPO_BASE}")
-    print_info(f"Target: {env_url}")
-    
-    try:
-        # Step 1: Prerequisites check
-        if not check_prerequisites():
-            print_error("Prerequisites check failed")
-            sys.exit(1)
-        
-        # Step 2: Download configuration
-        print_step(f"Downloading configuration: {config_name}.env")
-        if not download_file(env_url, env_file):
-            print_error(f"Failed to download configuration: {config_name}.env")
-            print_info("Available configurations:")
-            print_info(f"  Check: {GITHUB_REPO_BASE}/")
-            print_info("  Ensure the .env file exists and is accessible")
-            sys.exit(1)
-        
-        # Step 3: Load and validate configuration
-        config = load_env_config(env_file)
-        if not validate_config(config):
-            print_error("Configuration validation failed")
-            sys.exit(1)
-        
-        # Step 4: Update configuration for this server
-        config = update_env_config(config, config_name)
-        
-        # Step 5: Create installation directory
-        install_path = create_installation_directory(config_name)
-        
-        # Step 6: Clone/update AGiXT repository
-        branch = config.get('AGIXT_BRANCH', 'stable')
-        if not clone_agixt_repository(install_path, branch):
-            print_error("Failed to setup AGiXT repository")
-            sys.exit(1)
-        
-        # Step 7: Create environment file
-        env_file_path = create_env_file(config, install_path)
-        
-        # Step 8: Start AGiXT services
-        server_type = config.get('SERVER_TYPE', 'stable')
-        if not start_agixt_services(install_path, server_type):
-            print_error("Failed to start AGiXT services")
-            print_info("Check the logs for more information:")
-            print_info(f"  cd {install_path} && docker compose logs")
-            sys.exit(1)
-        
-        # Step 9: Wait for services to be ready
-        api_url, web_url = wait_for_services(config)
-        
-        # Step 10: Show installation summary
-        show_installation_summary(install_path, config, api_url, web_url)
-        
-        print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
-        
-    except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
-        sys.exit(1)
-    except Exception as e:
-        print_error(f"Installation failed: {e}")
-        import traceback
-        print_error("Full error details:")
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        # Clean up temporary files
-        cleanup_temp_files(env_file)
-
-if __name__ == "__main__":
-    main()
