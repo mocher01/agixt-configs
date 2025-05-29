@@ -1,0 +1,308 @@
+#!/bin/bash
+"""
+Complete AGiXT Clean Script
+===========================
+
+This script will completely remove:
+1. All Docker containers (running and stopped)
+2. All Docker images related to AGiXT
+3. All Docker volumes and networks
+4. All installation directories and files
+5. All configuration files
+
+WARNING: This will completely wipe your AGiXT installation!
+"""
+
+set -e  # Exit on any error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_step() {
+    echo -e "\n${BLUE}🚀 $1${NC}"
+}
+
+print_success() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}ℹ️  $1${NC}"
+}
+
+echo -e "${YELLOW}╔═══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║                  COMPLETE AGiXT CLEAN SCRIPT                  ║${NC}"
+echo -e "${YELLOW}║                                                               ║${NC}"
+echo -e "${YELLOW}║  ⚠️  WARNING: This will completely remove ALL AGiXT data!   ║${NC}"
+echo -e "${YELLOW}║                                                               ║${NC}"
+echo -e "${YELLOW}║  This will remove:                                           ║${NC}"
+echo -e "${YELLOW}║  • All Docker containers and images                          ║${NC}"
+echo -e "${YELLOW}║  • All installation directories                              ║${NC}"
+echo -e "${YELLOW}║  • All configuration files                                   ║${NC}"
+echo -e "${YELLOW}║  • All data and workspaces                                   ║${NC}"
+echo -e "${YELLOW}╚═══════════════════════════════════════════════════════════════╝${NC}"
+
+# Confirmation
+echo ""
+read -p "Are you sure you want to COMPLETELY CLEAN all AGiXT installations? (type 'YES' to confirm): " confirm
+if [ "$confirm" != "YES" ]; then
+    echo "Cleanup cancelled."
+    exit 0
+fi
+
+print_step "Starting complete AGiXT cleanup..."
+
+# Step 1: Stop all running containers
+print_step "Stopping all AGiXT containers..."
+
+# Find all AGiXT-related containers
+agixt_containers=$(docker ps -a --filter "name=agixt" --format "{{.Names}}" 2>/dev/null || true)
+if [ ! -z "$agixt_containers" ]; then
+    echo "Found AGiXT containers:"
+    echo "$agixt_containers"
+    
+    # Stop running containers
+    docker ps --filter "name=agixt" --format "{{.Names}}" | xargs -r docker stop
+    print_success "Stopped running AGiXT containers"
+    
+    # Remove all containers
+    echo "$agixt_containers" | xargs -r docker rm -f
+    print_success "Removed all AGiXT containers"
+else
+    print_info "No AGiXT containers found"
+fi
+
+# Step 2: Remove AGiXT Docker images
+print_step "Removing AGiXT Docker images..."
+
+# Remove AGiXT images
+agixt_images=$(docker images --filter "reference=*agixt*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null || true)
+if [ ! -z "$agixt_images" ]; then
+    echo "Found AGiXT images:"
+    echo "$agixt_images"
+    echo "$agixt_images" | xargs -r docker rmi -f
+    print_success "Removed AGiXT images"
+else
+    print_info "No AGiXT images found"
+fi
+
+# Remove joshxt images
+joshxt_images=$(docker images --filter "reference=joshxt/*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null || true)
+if [ ! -z "$joshxt_images" ]; then
+    echo "Found joshxt images:"
+    echo "$joshxt_images"
+    echo "$joshxt_images" | xargs -r docker rmi -f
+    print_success "Removed joshxt images"
+else
+    print_info "No joshxt images found"
+fi
+
+# Step 3: Remove Docker volumes
+print_step "Removing AGiXT Docker volumes..."
+
+agixt_volumes=$(docker volume ls --filter "name=agixt" --format "{{.Name}}" 2>/dev/null || true)
+if [ ! -z "$agixt_volumes" ]; then
+    echo "Found AGiXT volumes:"
+    echo "$agixt_volumes"
+    echo "$agixt_volumes" | xargs -r docker volume rm -f
+    print_success "Removed AGiXT volumes"
+else
+    print_info "No AGiXT volumes found"
+fi
+
+# Step 4: Remove Docker networks
+print_step "Removing AGiXT Docker networks..."
+
+agixt_networks=$(docker network ls --filter "name=agixt" --format "{{.Name}}" 2>/dev/null || true)
+if [ ! -z "$agixt_networks" ]; then
+    echo "Found AGiXT networks:"
+    echo "$agixt_networks"
+    echo "$agixt_networks" | xargs -r docker network rm
+    print_success "Removed AGiXT networks"
+else
+    print_info "No AGiXT networks found"
+fi
+
+# Step 5: Clean Docker system
+print_step "Cleaning Docker system..."
+docker system prune -f --volumes
+print_success "Docker system cleaned"
+
+# Step 6: Remove installation directories
+print_step "Removing AGiXT installation directories..."
+
+# Common installation locations
+install_locations=(
+    "/var/apps"
+    "$HOME/agixt-installations"
+    "$HOME/AGiXT"
+    "/opt/agixt"
+    "/usr/local/agixt"
+)
+
+for location in "${install_locations[@]}"; do
+    if [ -d "$location" ]; then
+        print_info "Checking $location..."
+        
+        # Find AGiXT directories
+        find "$location" -maxdepth 2 -type d -name "*agixt*" -o -name "*AGIXT*" 2>/dev/null | while read -r dir; do
+            if [ -d "$dir" ]; then
+                print_info "Removing directory: $dir"
+                
+                # Stop any compose services in the directory first
+                if [ -f "$dir/docker-compose.yml" ] || [ -f "$dir/docker-compose.yaml" ]; then
+                    print_info "Stopping compose services in $dir"
+                    (cd "$dir" && docker compose down --remove-orphans 2>/dev/null || true)
+                fi
+                
+                # Remove the directory
+                rm -rf "$dir"
+                print_success "Removed: $dir"
+            fi
+        done
+    else
+        print_info "$location does not exist, skipping..."
+    fi
+done
+
+# Step 7: Remove specific known installations
+print_step "Removing known AGiXT installations..."
+
+known_installations=(
+    "/var/apps/AGIXT_0529_1056"
+    "/var/apps/agixt_0529_1056"
+    "$HOME/AGIXT_0529_1056"
+    "$HOME/agixt_0529_1056"
+)
+
+for install_dir in "${known_installations[@]}"; do
+    if [ -d "$install_dir" ]; then
+        print_info "Found installation: $install_dir"
+        
+        # Stop compose services first
+        if [ -f "$install_dir/docker-compose.yml" ] || [ -f "$install_dir/docker-compose.yaml" ]; then
+            print_info "Stopping compose services..."
+            (cd "$install_dir" && docker compose down --remove-orphans 2>/dev/null || true)
+        fi
+        
+        # Remove directory
+        rm -rf "$install_dir"
+        print_success "Removed: $install_dir"
+    else
+        print_info "$install_dir does not exist"
+    fi
+done
+
+# Step 8: Remove temporary files
+print_step "Removing temporary files..."
+
+temp_files=(
+    "$HOME/*.env"
+    "$HOME/AGIXT_*.env" 
+    "$HOME/agixt_*.env"
+    "/tmp/*agixt*"
+    "/tmp/*AGIXT*"
+    "$HOME/get-docker.sh"
+)
+
+for pattern in "${temp_files[@]}"; do
+    files=$(ls $pattern 2>/dev/null || true)
+    if [ ! -z "$files" ]; then
+        echo "$files" | xargs -r rm -f
+        print_success "Removed temp files matching: $pattern"
+    fi
+done
+
+# Step 9: Clean up any remaining processes
+print_step "Checking for remaining AGiXT processes..."
+
+# Kill any remaining AGiXT processes
+agixt_processes=$(ps aux | grep -i agixt | grep -v grep | awk '{print $2}' || true)
+if [ ! -z "$agixt_processes" ]; then
+    print_warning "Found running AGiXT processes, killing them..."
+    echo "$agixt_processes" | xargs -r kill -9
+    print_success "Killed AGiXT processes"
+else
+    print_info "No AGiXT processes running"
+fi
+
+# Step 10: Final verification
+print_step "Final verification..."
+
+echo ""
+echo "=== CLEANUP VERIFICATION ==="
+
+# Check containers
+remaining_containers=$(docker ps -a --filter "name=agixt" --format "{{.Names}}" 2>/dev/null || true)
+if [ -z "$remaining_containers" ]; then
+    print_success "No AGiXT containers remaining"
+else
+    print_warning "Remaining containers: $remaining_containers"
+fi
+
+# Check images
+remaining_images=$(docker images --filter "reference=*agixt*" --filter "reference=joshxt/*" --format "{{.Repository}}:{{.Tag}}" 2>/dev/null || true)
+if [ -z "$remaining_images" ]; then
+    print_success "No AGiXT images remaining"
+else
+    print_warning "Remaining images: $remaining_images"
+fi
+
+# Check directories
+remaining_dirs=""
+for location in "${install_locations[@]}"; do
+    if [ -d "$location" ]; then
+        found_dirs=$(find "$location" -maxdepth 2 -type d -name "*agixt*" -o -name "*AGIXT*" 2>/dev/null || true)
+        if [ ! -z "$found_dirs" ]; then
+            remaining_dirs="$remaining_dirs\n$found_dirs"
+        fi
+    fi
+done
+
+if [ -z "$remaining_dirs" ]; then
+    print_success "No AGiXT directories remaining"
+else
+    print_warning "Remaining directories: $remaining_dirs"
+fi
+
+# Display disk space freed
+print_step "Cleanup Summary..."
+echo ""
+echo "=== CLEANUP COMPLETE ==="
+print_success "AGiXT has been completely removed from your system!"
+echo ""
+echo "What was cleaned:"
+echo "  ✅ All Docker containers stopped and removed"
+echo "  ✅ All Docker images removed" 
+echo "  ✅ All Docker volumes removed"
+echo "  ✅ All Docker networks removed"
+echo "  ✅ All installation directories removed"
+echo "  ✅ All configuration files removed"
+echo "  ✅ All temporary files cleaned"
+echo "  ✅ Docker system pruned"
+echo ""
+
+# Show available disk space
+df -h / | tail -1 | awk '{print "💾 Available disk space: " $4}'
+
+echo ""
+print_success "System is now clean and ready for fresh AGiXT installation!"
+echo ""
+echo "Next steps:"
+echo "  1. Run the fixed installation script"
+echo "  2. python3 install-agixt-fixed.py AGIXT_0529_1056 your_token"
+echo ""
+
+print_warning "Note: If you had any custom data, it has been permanently deleted!"
