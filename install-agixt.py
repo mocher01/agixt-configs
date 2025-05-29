@@ -413,6 +413,10 @@ def update_env_config(config: Dict[str, str], config_name: str) -> Dict[str, str
         config['APP_URI'] = f"http://{server_ip}:{interactive_port}"
         print_info(f"Updated APP_URI: {config['APP_URI']}")
     
+    # Update AGIXT_SERVER for web interface API calls
+    config['AGIXT_SERVER'] = f"http://{server_ip}:{agixt_port}"
+    print_info(f"Set AGIXT_SERVER: {config['AGIXT_SERVER']}")
+    
     # Update AUTH_WEB to match APP_URI
     config['AUTH_WEB'] = f"{config['APP_URI']}/user"
     
