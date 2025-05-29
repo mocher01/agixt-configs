@@ -580,7 +580,12 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
                 if section_keys:
                     f.write(f"\n# {section_name}\n")
                     for key in section_keys:
-                        f.write(f'{key}="{config[key]}"\n')
+                        value = config[key]
+                        # Don't add quotes if value is empty or already quoted
+                        if not value or value.startswith('"'):
+                            f.write(f'{key}={value}\n')
+                        else:
+                            f.write(f'{key}="{value}"\n')
                         written_keys.add(key)
             
             # Write remaining keys
@@ -588,7 +593,12 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
             if remaining_keys:
                 f.write(f"\n# Additional Settings\n")
                 for key in remaining_keys:
-                    f.write(f'{key}="{config[key]}"\n')
+                    value = config[key]
+                    # Don't add quotes if value is empty or already quoted
+                    if not value or value.startswith('"'):
+                        f.write(f'{key}={value}\n')
+                    else:
+                        f.write(f'{key}="{value}"\n')
         
         # Secure the file and fix ownership
         os.chmod(env_file, 0o600)
