@@ -4,16 +4,16 @@ AGiXT Automated Installer - Production Ready
 ===========================================
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME
+  curl -H "Authorization: token YOUR_GITHUB_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - CONFIG_NAME YOUR_GITHUB_TOKEN
   python3 install-agixt.py CONFIG_NAME [GITHUB_TOKEN]
 
 Example:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGiXT-0528_1531
-  python3 install-agixt.py AGiXT-0528_1531 github_pat_xxxxx
+  curl -H "Authorization: token github_pat_xxxxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGIXT_0529_1056 github_pat_xxxxx
+  python3 install-agixt.py AGIXT_0529_1056 github_pat_xxxxx
 
 This script will:
 1. Download the specified .env config from GitHub
-2. Create installation folder based on INSTALL_FOLDER_NAME
+2. Create installation folder based on CONFIG_NAME
 3. Download and set up AGiXT with all configurations
 4. Apply environment-specific patches
 5. Start the AGiXT server with proper health checks
@@ -214,9 +214,17 @@ def install_docker() -> bool:
         
         # Check if running as root or with sudo
         if os.geteuid() != 0:
-            print_error("Docker installation requires root privileges")
-            print_info("Run with: sudo python3 install-agixt.py ...")
-            return False
+            print_warning("Docker installation requires root privileges")
+            print_info("Please run one of these commands:")
+            print_info("  sudo python3 install-agixt.py [config_name] [token]")
+            print_info("  OR install Docker manually: https://docs.docker.com/get-docker/")
+            
+            response = input("Do you want to continue without Docker auto-install? (y/N): ").strip().lower()
+            if response != 'y':
+                return False
+            else:
+                print_warning("Continuing without Docker - you'll need to install it manually")
+                return True
         
         commands = [
             "curl -fsSL https://get.docker.com -o get-docker.sh",
@@ -357,13 +365,6 @@ def validate_config(config: Dict[str, str]) -> bool:
     """Validate essential configuration parameters"""
     print_step("Validating configuration...")
     
-    required_fields = ['INSTALL_FOLDER_NAME']
-    missing_fields = [field for field in required_fields if not config.get(field)]
-    
-    if missing_fields:
-        print_error(f"Missing required configuration: {', '.join(missing_fields)}")
-        return False
-    
     # Check for AI provider configuration
     ai_providers = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'WITH_EZLOCALAI']
     has_ai_provider = any(config.get(provider) for provider in ai_providers)
@@ -383,7 +384,7 @@ def validate_config(config: Dict[str, str]) -> bool:
     print_success("Configuration validation complete")
     return True
 
-def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
+def update_env_config(config: Dict[str, str], config_name: str) -> Dict[str, str]:
     """Update configuration with server-specific values"""
     print_step("Updating configuration for this server...")
     
@@ -422,8 +423,7 @@ def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
         print_success("Generated secure API key")
     
     # Set working directory relative to installation
-    install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
-    config['WORKING_DIRECTORY'] = f"./{install_folder}/WORKSPACE"
+    config['WORKING_DIRECTORY'] = f"./{config_name}/WORKSPACE"
     
     # Set reasonable defaults for performance
     if not config.get('UVICORN_WORKERS'):
@@ -442,9 +442,9 @@ def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
     print_success("Configuration updated successfully")
     return config
 
-def create_installation_directory(config: Dict[str, str]) -> str:
+def create_installation_directory(config_name: str) -> str:
     """Create and prepare the installation directory"""
-    install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
+    install_folder = config_name  # Use config name as folder name
     
     # Use /var/apps as base path, but fall back to user home if permission denied
     base_paths = [DEFAULT_BASE_PATH, os.path.expanduser("~/agixt-installations")]
@@ -474,6 +474,9 @@ def create_installation_directory(config: Dict[str, str]) -> str:
                     f.write('test')
                 os.remove(test_file)
                 print_success(f"Write permissions confirmed: {install_path}")
+                
+                # Fix ownership if running as sudo
+                fix_ownership(install_path)
                 return install_path
             except Exception as e:
                 print_warning(f"No write permission to {install_path}: {e}")
@@ -489,6 +492,29 @@ def create_installation_directory(config: Dict[str, str]) -> str:
     print_error("Could not create installation directory in any location")
     print_info("Try running with sudo or ensure you have write permissions")
     sys.exit(1)
+
+def fix_ownership(install_path: str):
+    """Fix file ownership if running as sudo"""
+    try:
+        if 'SUDO_USER' in os.environ and os.geteuid() == 0:
+            sudo_user = os.environ['SUDO_USER']
+            # Get the actual user's UID and GID
+            import pwd
+            pw_record = pwd.getpwnam(sudo_user)
+            user_uid = pw_record.pw_uid
+            user_gid = pw_record.pw_gid
+            
+            # Change ownership recursively
+            for root, dirs, files in os.walk(install_path):
+                os.chown(root, user_uid, user_gid)
+                for dir_name in dirs:
+                    os.chown(os.path.join(root, dir_name), user_uid, user_gid)
+                for file_name in files:
+                    os.chown(os.path.join(root, file_name), user_uid, user_gid)
+            
+            print_success(f"Fixed ownership for user: {sudo_user}")
+    except Exception as e:
+        print_warning(f"Could not fix ownership: {e}")
 
 def clone_agixt_repository(install_path: str, branch: str = "stable") -> bool:
     """Clone or update the AGiXT repository"""
@@ -540,7 +566,7 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
             
             # Group related configurations
             sections = {
-                'Core Settings': ['INSTALL_FOLDER_NAME', 'SERVER_TYPE', 'AGIXT_API_KEY'],
+                'Core Settings': ['SERVER_TYPE', 'AGIXT_API_KEY'],
                 'Network & URLs': ['AGIXT_URI', 'APP_URI', 'AUTH_WEB', 'ALLOWED_DOMAINS'],
                 'Authentication': ['SMTP_SERVER', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'SMTP_USE_TLS', 'FROM_EMAIL'],
                 'AI Providers': ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GOOGLE_API_KEY', 'WITH_EZLOCALAI'],
@@ -564,8 +590,9 @@ def create_env_file(config: Dict[str, str], install_path: str) -> str:
                 for key in remaining_keys:
                     f.write(f'{key}="{config[key]}"\n')
         
-        # Secure the file
+        # Secure the file and fix ownership
         os.chmod(env_file, 0o600)
+        fix_ownership(env_file)
         print_success("Environment file created and secured")
         return env_file
         
@@ -716,119 +743,119 @@ def show_installation_summary(install_path: str, config: Dict[str, str], api_url
     print(f"\n💡 {Colors.BOLD}Useful Commands:{Colors.END}")
     print(f"   View logs:     cd {install_path} && docker compose logs -f")
     print(f"   Restart:       cd {install_path} && docker compose restart")
-  print(f"   Stop:          cd {install_path} && docker compose down")
-   print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
+    print(f"   Stop:          cd {install_path} && docker compose down")
+    print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
 
 def cleanup_temp_files(*files):
-   """Clean up temporary files"""
-   for file in files:
-       try:
-           if os.path.exists(file):
-               os.remove(file)
-               print_info(f"Cleaned up: {file}")
-       except Exception as e:
-           print_warning(f"Could not remove {file}: {e}")
+    """Clean up temporary files"""
+    for file in files:
+        try:
+            if os.path.exists(file):
+                os.remove(file)
+                print_info(f"Cleaned up: {file}")
+        except Exception as e:
+            print_warning(f"Could not remove {file}: {e}")
 
 def main():
-   """Main installation function"""
-   print(f"{Colors.BOLD}{Colors.MAGENTA}")
-   print("╔═══════════════════════════════════════════════════════════════╗")
-   print("║                  AGiXT Automated Installer                   ║")
-   print("║                     Production Ready v2.1                    ║")
-   print("╚═══════════════════════════════════════════════════════════════╝")
-   print(f"{Colors.END}")
-   
-   # Parse command line arguments
-   if len(sys.argv) < 2:
-       print_error("Missing required argument: CONFIG_NAME")
-       print(f"\n{Colors.BOLD}Usage:{Colors.END}")
-       print("  python3 install-agixt.py <config_name> [github_token]")
-       print(f"\n{Colors.BOLD}Examples:{Colors.END}")
-       print("  python3 install-agixt.py AGiXT-0528_1531")
-       print("  python3 install-agixt.py AGiXT-0528_1531 github_pat_xxxxx")
-       print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
-       print("  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGiXT-0528_1531")
-       sys.exit(1)
-   
-   config_name = sys.argv[1]
-   github_token = sys.argv[2] if len(sys.argv) > 2 else None
-   
-   # Set token in environment for download functions
-   if github_token:
-       os.environ['GITHUB_TOKEN'] = github_token
-       print_success("GitHub token configured for private repository access")
-   
-   env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
-   env_file = f"{config_name}.env"
-   
-   print_info(f"Configuration: {config_name}")
-   print_info(f"Repository: {GITHUB_REPO_BASE}")
-   print_info(f"Target: {env_url}")
-   
-   try:
-       # Step 1: Prerequisites check
-       if not check_prerequisites():
-           print_error("Prerequisites check failed")
-           sys.exit(1)
-       
-       # Step 2: Download configuration
-       print_step(f"Downloading configuration: {config_name}.env")
-       if not download_file(env_url, env_file):
-           print_error(f"Failed to download configuration: {config_name}.env")
-           print_info("Available configurations:")
-           print_info(f"  Check: {GITHUB_REPO_BASE}/")
-           print_info("  Ensure the .env file exists and is accessible")
-           sys.exit(1)
-       
-       # Step 3: Load and validate configuration
-       config = load_env_config(env_file)
-       if not validate_config(config):
-           print_error("Configuration validation failed")
-           sys.exit(1)
-       
-       # Step 4: Update configuration for this server
-       config = update_env_config(config)
-       
-       # Step 5: Create installation directory
-       install_path = create_installation_directory(config)
-       
-       # Step 6: Clone/update AGiXT repository
-       branch = config.get('AGIXT_BRANCH', 'stable')
-       if not clone_agixt_repository(install_path, branch):
-           print_error("Failed to setup AGiXT repository")
-           sys.exit(1)
-       
-       # Step 7: Create environment file
-       env_file_path = create_env_file(config, install_path)
-       
-       # Step 8: Start AGiXT services
-       server_type = config.get('SERVER_TYPE', 'stable')
-       if not start_agixt_services(install_path, server_type):
-           print_error("Failed to start AGiXT services")
-           print_info("Check the logs for more information:")
-           print_info(f"  cd {install_path} && docker compose logs")
-           sys.exit(1)
-       
-       # Step 9: Wait for services to be ready
-       api_url, web_url = wait_for_services(config)
-       
-       # Step 10: Show installation summary
-       show_installation_summary(install_path, config, api_url, web_url)
-       
-       print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
-       
-   except KeyboardInterrupt:
-       print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
-       sys.exit(1)
-   except Exception as e:
-       print_error(f"Installation failed: {e}")
-       import traceback
-       print_error("Full error details:")
-       traceback.print_exc()
-       sys.exit(1)
-   finally:
-       # Clean up temporary files
-       cleanup_temp_files(env_file)
+    """Main installation function"""
+    print(f"{Colors.BOLD}{Colors.MAGENTA}")
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print("║                  AGiXT Automated Installer                   ║")
+    print("║                     Production Ready v2.1                    ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    print(f"{Colors.END}")
+    
+    # Parse command line arguments
+    if len(sys.argv) < 2:
+        print_error("Missing required argument: CONFIG_NAME")
+        print(f"\n{Colors.BOLD}Usage:{Colors.END}")
+        print("  python3 install-agixt.py <config_name> [github_token]")
+        print(f"\n{Colors.BOLD}Examples:{Colors.END}")
+        print("  python3 install-agixt.py AGIXT_0529_1056")
+        print("  python3 install-agixt.py AGIXT_0529_1056 github_pat_xxxxx")
+        print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
+        print('  curl -H "Authorization: token github_pat_xxxxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGIXT_0529_1056 github_pat_xxxxx')
+        sys.exit(1)
+    
+    config_name = sys.argv[1]
+    github_token = sys.argv[2] if len(sys.argv) > 2 else None
+    
+    # Set token in environment for download functions
+    if github_token:
+        os.environ['GITHUB_TOKEN'] = github_token
+        print_success("GitHub token configured for private repository access")
+    
+    env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
+    env_file = f"{config_name}.env"
+    
+    print_info(f"Configuration: {config_name}")
+    print_info(f"Repository: {GITHUB_REPO_BASE}")
+    print_info(f"Target: {env_url}")
+    
+    try:
+        # Step 1: Prerequisites check
+        if not check_prerequisites():
+            print_error("Prerequisites check failed")
+            sys.exit(1)
+        
+        # Step 2: Download configuration
+        print_step(f"Downloading configuration: {config_name}.env")
+        if not download_file(env_url, env_file):
+            print_error(f"Failed to download configuration: {config_name}.env")
+            print_info("Available configurations:")
+            print_info(f"  Check: {GITHUB_REPO_BASE}/")
+            print_info("  Ensure the .env file exists and is accessible")
+            sys.exit(1)
+        
+        # Step 3: Load and validate configuration
+        config = load_env_config(env_file)
+        if not validate_config(config):
+            print_error("Configuration validation failed")
+            sys.exit(1)
+        
+        # Step 4: Update configuration for this server
+        config = update_env_config(config, config_name)
+        
+        # Step 5: Create installation directory
+        install_path = create_installation_directory(config_name)
+        
+        # Step 6: Clone/update AGiXT repository
+        branch = config.get('AGIXT_BRANCH', 'stable')
+        if not clone_agixt_repository(install_path, branch):
+            print_error("Failed to setup AGiXT repository")
+            sys.exit(1)
+        
+        # Step 7: Create environment file
+        env_file_path = create_env_file(config, install_path)
+        
+        # Step 8: Start AGiXT services
+        server_type = config.get('SERVER_TYPE', 'stable')
+        if not start_agixt_services(install_path, server_type):
+            print_error("Failed to start AGiXT services")
+            print_info("Check the logs for more information:")
+            print_info(f"  cd {install_path} && docker compose logs")
+            sys.exit(1)
+        
+        # Step 9: Wait for services to be ready
+        api_url, web_url = wait_for_services(config)
+        
+        # Step 10: Show installation summary
+        show_installation_summary(install_path, config, api_url, web_url)
+        
+        print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
+        
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Installation failed: {e}")
+        import traceback
+        print_error("Full error details:")
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        # Clean up temporary files
+        cleanup_temp_files(env_file)
 
 if __name__ == "__main__":
-   main()
+    main()
