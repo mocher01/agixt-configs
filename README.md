@@ -35,41 +35,16 @@ Format: github_pat_11BJJ4RQA005oyMDCW6lKY_cxeAVZE46oPNgK0U2IRUsrVDZiK3BHfU4mHSU9
 
 
 Step 2: Test Token Access
-bash# Test if your token can access the repository
-curl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" \
-     https://api.github.com/repos/mocher01/agixt-configs/contents
-🚀 Installation Commands
-Single Command Installation
-Replace YOUR_TOKEN_HERE with your actual GitHub token and CONFIG_NAME with your .env file name (without .env extension):
-bashcurl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py
-
-python3 install-agixt.py CONFIG_NAME github_pat_YOUR_TOKEN_HERE
-Example: Install AGiXT-0528_1531 Configuration
-bash# Step 1: Download installer script
-curl -H "Authorization: token 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" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py
-
-# Step 2: Run installation with your config
-python3 install-agixt.py AGiXT-0528_1531 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
-Example: Install Production Server Configuration
-bash# Step 1: Download installer script  
-curl -H "Authorization: token github_pat_YOUR_ACTUAL_TOKEN" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py
-
-# Step 2: Run installation for production
-python3 install-agixt.py production-server github_pat_YOUR_ACTUAL_TOKEN
-Example: Install Development Server Configuration
-bash# Step 1: Download installer script
-curl -H "Authorization: token github_pat_YOUR_ACTUAL_TOKEN" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py
-
-# Step 2: Run installation for development  
-python3 install-agixt.py development-server github_pat_YOUR_ACTUAL_TOKEN
+bashcurl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" https://api.github.com/repos/mocher01/agixt-configs/contents
+🚀 Installation Commands - Copy & Paste Ready
+Template Command (Replace YOUR_TOKEN_HERE and CONFIG_NAME)
+bashcurl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py CONFIG_NAME github_pat_YOUR_TOKEN_HERE
+Example: AGiXT-0528_1531 Configuration (Copy & Paste Ready)
+bashcurl -H "Authorization: token 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" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py AGiXT-0528_1531 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
+Example: Production Server Configuration (Copy & Paste Ready)
+bashcurl -H "Authorization: token github_pat_YOUR_ACTUAL_TOKEN" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py production-server github_pat_YOUR_ACTUAL_TOKEN
+Example: Development Server Configuration (Copy & Paste Ready)
+bashcurl -H "Authorization: token github_pat_YOUR_ACTUAL_TOKEN" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py development-server github_pat_YOUR_ACTUAL_TOKEN
 🎯 What The Script Does Automatically
 
 ✅ Downloads your specific .env configuration from this private repository
@@ -200,11 +175,7 @@ SMTP_PASSWORD="your-smtp-password"
 OPENAI_API_KEY="sk-your-openai-key"
 # ... other settings
 Step 2: Install on New Server
-bashcurl -H "Authorization: token github_pat_YOUR_TOKEN" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py
-
-python3 install-agixt.py new-server github_pat_YOUR_TOKEN
+bashcurl -H "Authorization: token github_pat_YOUR_TOKEN" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py new-server github_pat_YOUR_TOKEN
 🔄 Updates and Maintenance
 The installation system automatically:
 
@@ -222,16 +193,6 @@ Issues: https://github.com/Josh-XT/AGiXT/issues
 
 🎉 Quick Start Template
 Copy, paste, and adapt this command for your installation:
-bash# Replace YOUR_TOKEN_HERE with your actual GitHub token
-# Replace CONFIG_NAME with your .env filename (without .env)
-
-curl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && \
-python3 install-agixt.py CONFIG_NAME github_pat_YOUR_TOKEN_HERE
+bashcurl -H "Authorization: token github_pat_YOUR_TOKEN_HERE" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py CONFIG_NAME github_pat_YOUR_TOKEN_HERE
 Example for AGiXT-0528_1531 configuration:
-bashcurl -H "Authorization: token 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" \
-     -o install-agixt.py \
-     https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && \
-python3 install-agixt.py AGiXT-0528_1531 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
-That's it! Your custom AGiXT server will be deployed and ready to use! 🚀RéessayerClaude peut faire des erreurs. Assurez-vous de vérifier ses réponses.
+bashcurl -H "Authorization: token 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" -o install-agixt.py https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py && python3 install-agixt.py AGiXT-0528_1531 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
