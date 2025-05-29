@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - Enhanced Version
+AGiXT Automated Installer - Production Ready
 ===========================================
 
 Usage:
@@ -8,8 +8,8 @@ Usage:
   python3 install-agixt.py CONFIG_NAME [GITHUB_TOKEN]
 
 Example:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - test-server
-  python3 install-agixt.py test-server github_pat_xxxxx
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGiXT-0528_1531
+  python3 install-agixt.py AGiXT-0528_1531 github_pat_xxxxx
 
 This script will:
 1. Download the specified .env config from GitHub
@@ -18,8 +18,8 @@ This script will:
 4. Apply environment-specific patches
 5. Start the AGiXT server with proper health checks
 
-Author: Enhanced by Claude
-Version: 2.0.0
+Author: Enhanced Production Version
+Version: 2.1.0
 """
 
 import os
@@ -109,7 +109,7 @@ def download_file(url: str, filename: str) -> bool:
             # Create request with authorization header
             req = urllib.request.Request(url)
             req.add_header('Authorization', f'token {github_token}')
-            req.add_header('User-Agent', 'AGiXT-Installer/2.0')
+            req.add_header('User-Agent', 'AGiXT-Installer/2.1')
             
             with urllib.request.urlopen(req, timeout=30) as response:
                 with open(filename, 'wb') as f:
@@ -387,13 +387,18 @@ def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
     """Update configuration with server-specific values"""
     print_step("Updating configuration for this server...")
     
+    # Remove NEXT_PUBLIC_AGIXT_API_KEY if present (security vulnerability)
+    if 'NEXT_PUBLIC_AGIXT_API_KEY' in config:
+        del config['NEXT_PUBLIC_AGIXT_API_KEY']
+        print_warning("Removed NEXT_PUBLIC_AGIXT_API_KEY (security vulnerability - exposes API key to browser)")
+    
     # Get server IP
     server_ip = get_server_ip()
     print_info(f"Server IP: {server_ip}")
     
     # Update URLs based on detected IP and configured ports
-    agixt_port = config.get('AGIXT_PORT', '7437')
-    interactive_port = config.get('AGIXT_INTERACTIVE_PORT', '3437')
+    agixt_port = "7437"  # Default AGiXT API port
+    interactive_port = "3437"  # Default interactive port
     
     # Update AGIXT_URI if it's localhost or not set
     current_uri = config.get('AGIXT_URI', '')
@@ -407,19 +412,14 @@ def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
         config['APP_URI'] = f"http://{server_ip}:{interactive_port}"
         print_info(f"Updated APP_URI: {config['APP_URI']}")
     
-    # Ensure AGIXT_SERVER_INTERNAL is set for docker networking
-    config['AGIXT_SERVER_INTERNAL'] = "http://agixt:7437"
+    # Update AUTH_WEB to match APP_URI
+    config['AUTH_WEB'] = f"{config['APP_URI']}/user"
     
     # Generate secure API key if not set or using default
     current_api_key = config.get('AGIXT_API_KEY', '')
     if not current_api_key or current_api_key == 'None':
         config['AGIXT_API_KEY'] = secrets.token_hex(32)
         print_success("Generated secure API key")
-    
-    # Remove NEXT_PUBLIC_AGIXT_API_KEY if present (security vulnerability)
-    if 'NEXT_PUBLIC_AGIXT_API_KEY' in config:
-        del config['NEXT_PUBLIC_AGIXT_API_KEY']
-        print_warning("Removed NEXT_PUBLIC_AGIXT_API_KEY (security vulnerability - exposes API key to browser)")
     
     # Set working directory relative to installation
     install_folder = config.get('INSTALL_FOLDER_NAME', 'AGiXT-Default')
@@ -429,6 +429,15 @@ def update_env_config(config: Dict[str, str]) -> Dict[str, str]:
     if not config.get('UVICORN_WORKERS'):
         import multiprocessing
         config['UVICORN_WORKERS'] = str(min(6, multiprocessing.cpu_count()))
+    
+    # Map SERVER_TYPE to appropriate branch
+    server_type = config.get('SERVER_TYPE', 'stable')
+    if server_type == 'stable':
+        config['AGIXT_BRANCH'] = 'stable'
+    elif server_type == 'dev':
+        config['AGIXT_BRANCH'] = 'main'
+    else:
+        config['AGIXT_BRANCH'] = 'stable'  # Default fallback
     
     print_success("Configuration updated successfully")
     return config
@@ -687,6 +696,12 @@ def show_installation_summary(install_path: str, config: Dict[str, str], api_url
     else:
         print(f"   {Colors.YELLOW}No AI providers configured{Colors.END}")
     
+    # Security status
+    api_key_required = config.get('AGIXT_REQUIRE_API_KEY', 'false').lower() == 'true'
+    print(f"\n🔐 {Colors.BOLD}Security:{Colors.END}")
+    print(f"   API Key Required: {Colors.GREEN if api_key_required else Colors.YELLOW}{'Yes' if api_key_required else 'No'}{Colors.END}")
+    print(f"   API Key: {config.get('AGIXT_API_KEY', 'Not set')[:16]}...")
+    
     print(f"\n🚀 {Colors.BOLD}Next Steps:{Colors.END}")
     print("   1. Open the web interface in your browser")
     if smtp_configured:
@@ -701,119 +716,119 @@ def show_installation_summary(install_path: str, config: Dict[str, str], api_url
     print(f"\n💡 {Colors.BOLD}Useful Commands:{Colors.END}")
     print(f"   View logs:     cd {install_path} && docker compose logs -f")
     print(f"   Restart:       cd {install_path} && docker compose restart")
-    print(f"   Stop:          cd {install_path} && docker compose down")
-    print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
+  print(f"   Stop:          cd {install_path} && docker compose down")
+   print(f"   Update:        cd {install_path} && git pull && docker compose up -d")
 
 def cleanup_temp_files(*files):
-    """Clean up temporary files"""
-    for file in files:
-        try:
-            if os.path.exists(file):
-                os.remove(file)
-                print_info(f"Cleaned up: {file}")
-        except Exception as e:
-            print_warning(f"Could not remove {file}: {e}")
+   """Clean up temporary files"""
+   for file in files:
+       try:
+           if os.path.exists(file):
+               os.remove(file)
+               print_info(f"Cleaned up: {file}")
+       except Exception as e:
+           print_warning(f"Could not remove {file}: {e}")
 
 def main():
-    """Main installation function"""
-    print(f"{Colors.BOLD}{Colors.MAGENTA}")
-    print("╔═══════════════════════════════════════════════════════════════╗")
-    print("║                  AGiXT Automated Installer                   ║")
-    print("║                     Enhanced Version 2.0                     ║")
-    print("╚═══════════════════════════════════════════════════════════════╝")
-    print(f"{Colors.END}")
-    
-    # Parse command line arguments
-    if len(sys.argv) < 2:
-        print_error("Missing required argument: CONFIG_NAME")
-        print(f"\n{Colors.BOLD}Usage:{Colors.END}")
-        print("  python3 install-agixt.py <config_name> [github_token]")
-        print(f"\n{Colors.BOLD}Examples:{Colors.END}")
-        print("  python3 install-agixt.py test-server")
-        print("  python3 install-agixt.py prod-config github_pat_xxxxx")
-        print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
-        print("  curl -sSL https://raw.githubusercontent.com/your-repo/main/install-agixt.py | python3 - config_name")
-        sys.exit(1)
-    
-    config_name = sys.argv[1]
-    github_token = sys.argv[2] if len(sys.argv) > 2 else None
-    
-    # Set token in environment for download functions
-    if github_token:
-        os.environ['GITHUB_TOKEN'] = github_token
-        print_success("GitHub token configured for private repository access")
-    
-    env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
-    env_file = f"{config_name}.env"
-    
-    print_info(f"Configuration: {config_name}")
-    print_info(f"Repository: {GITHUB_REPO_BASE}")
-    print_info(f"Target: {env_url}")
-    
-    try:
-        # Step 1: Prerequisites check
-        if not check_prerequisites():
-            print_error("Prerequisites check failed")
-            sys.exit(1)
-        
-        # Step 2: Download configuration
-        print_step(f"Downloading configuration: {config_name}.env")
-        if not download_file(env_url, env_file):
-            print_error(f"Failed to download configuration: {config_name}.env")
-            print_info("Available configurations:")
-            print_info(f"  Check: {GITHUB_REPO_BASE}/")
-            print_info("  Ensure the .env file exists and is accessible")
-            sys.exit(1)
-        
-        # Step 3: Load and validate configuration
-        config = load_env_config(env_file)
-        if not validate_config(config):
-            print_error("Configuration validation failed")
-            sys.exit(1)
-        
-        # Step 4: Update configuration for this server
-        config = update_env_config(config)
-        
-        # Step 5: Create installation directory
-        install_path = create_installation_directory(config)
-        
-        # Step 6: Clone/update AGiXT repository
-        branch = config.get('AGIXT_BRANCH', config.get('SERVER_TYPE', 'stable'))
-        if not clone_agixt_repository(install_path, branch):
-            print_error("Failed to setup AGiXT repository")
-            sys.exit(1)
-        
-        # Step 7: Create environment file
-        env_file_path = create_env_file(config, install_path)
-        
-        # Step 8: Start AGiXT services
-        server_type = config.get('SERVER_TYPE', 'stable')
-        if not start_agixt_services(install_path, server_type):
-            print_error("Failed to start AGiXT services")
-            print_info("Check the logs for more information:")
-            print_info(f"  cd {install_path} && docker compose logs")
-            sys.exit(1)
-        
-        # Step 9: Wait for services to be ready
-        api_url, web_url = wait_for_services(config)
-        
-        # Step 10: Show installation summary
-        show_installation_summary(install_path, config, api_url, web_url)
-        
-        print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
-        
-    except KeyboardInterrupt:
-        print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
-        sys.exit(1)
-    except Exception as e:
-        print_error(f"Installation failed: {e}")
-        import traceback
-        print_error("Full error details:")
-        traceback.print_exc()
-        sys.exit(1)
-    finally:
-        # Clean up temporary files
-        cleanup_temp_files(env_file)
+   """Main installation function"""
+   print(f"{Colors.BOLD}{Colors.MAGENTA}")
+   print("╔═══════════════════════════════════════════════════════════════╗")
+   print("║                  AGiXT Automated Installer                   ║")
+   print("║                     Production Ready v2.1                    ║")
+   print("╚═══════════════════════════════════════════════════════════════╝")
+   print(f"{Colors.END}")
+   
+   # Parse command line arguments
+   if len(sys.argv) < 2:
+       print_error("Missing required argument: CONFIG_NAME")
+       print(f"\n{Colors.BOLD}Usage:{Colors.END}")
+       print("  python3 install-agixt.py <config_name> [github_token]")
+       print(f"\n{Colors.BOLD}Examples:{Colors.END}")
+       print("  python3 install-agixt.py AGiXT-0528_1531")
+       print("  python3 install-agixt.py AGiXT-0528_1531 github_pat_xxxxx")
+       print(f"\n{Colors.BOLD}Remote Installation:{Colors.END}")
+       print("  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGiXT-0528_1531")
+       sys.exit(1)
+   
+   config_name = sys.argv[1]
+   github_token = sys.argv[2] if len(sys.argv) > 2 else None
+   
+   # Set token in environment for download functions
+   if github_token:
+       os.environ['GITHUB_TOKEN'] = github_token
+       print_success("GitHub token configured for private repository access")
+   
+   env_url = f"{GITHUB_REPO_BASE}/{config_name}.env"
+   env_file = f"{config_name}.env"
+   
+   print_info(f"Configuration: {config_name}")
+   print_info(f"Repository: {GITHUB_REPO_BASE}")
+   print_info(f"Target: {env_url}")
+   
+   try:
+       # Step 1: Prerequisites check
+       if not check_prerequisites():
+           print_error("Prerequisites check failed")
+           sys.exit(1)
+       
+       # Step 2: Download configuration
+       print_step(f"Downloading configuration: {config_name}.env")
+       if not download_file(env_url, env_file):
+           print_error(f"Failed to download configuration: {config_name}.env")
+           print_info("Available configurations:")
+           print_info(f"  Check: {GITHUB_REPO_BASE}/")
+           print_info("  Ensure the .env file exists and is accessible")
+           sys.exit(1)
+       
+       # Step 3: Load and validate configuration
+       config = load_env_config(env_file)
+       if not validate_config(config):
+           print_error("Configuration validation failed")
+           sys.exit(1)
+       
+       # Step 4: Update configuration for this server
+       config = update_env_config(config)
+       
+       # Step 5: Create installation directory
+       install_path = create_installation_directory(config)
+       
+       # Step 6: Clone/update AGiXT repository
+       branch = config.get('AGIXT_BRANCH', 'stable')
+       if not clone_agixt_repository(install_path, branch):
+           print_error("Failed to setup AGiXT repository")
+           sys.exit(1)
+       
+       # Step 7: Create environment file
+       env_file_path = create_env_file(config, install_path)
+       
+       # Step 8: Start AGiXT services
+       server_type = config.get('SERVER_TYPE', 'stable')
+       if not start_agixt_services(install_path, server_type):
+           print_error("Failed to start AGiXT services")
+           print_info("Check the logs for more information:")
+           print_info(f"  cd {install_path} && docker compose logs")
+           sys.exit(1)
+       
+       # Step 9: Wait for services to be ready
+       api_url, web_url = wait_for_services(config)
+       
+       # Step 10: Show installation summary
+       show_installation_summary(install_path, config, api_url, web_url)
+       
+       print(f"\n{Colors.GREEN}✨ Installation completed successfully!{Colors.END}")
+       
+   except KeyboardInterrupt:
+       print(f"\n{Colors.YELLOW}Installation cancelled by user{Colors.END}")
+       sys.exit(1)
+   except Exception as e:
+       print_error(f"Installation failed: {e}")
+       import traceback
+       print_error("Full error details:")
+       traceback.print_exc()
+       sys.exit(1)
+   finally:
+       # Clean up temporary files
+       cleanup_temp_files(env_file)
 
 if __name__ == "__main__":
-    main()
+   main()
