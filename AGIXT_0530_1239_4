@@ -1,0 +1,88 @@
+# =============================================================================
+# AGiXT Server Configuration - CORRIGÉE SELON DOCUMENTATION OFFICIELLE
+# =============================================================================
+# File: AGIXT_0530_1239_4.env
+# Version: 4
+# Modifications v3 → v4:
+# - CORRECTION: AGIXT_SHOW_SELECTION=agent,conversation (ordre correct)
+# - AJOUT: INTERACTIVE_MODE=chat (obligatoire selon doc)
+# - CORRECTION: AUTH_PROVIDER=magicalauth (syntax correcte)
+# - AJOUT: Variables manquantes critiques pour interface management
+# - BASÉ SUR: Documentation officielle Environment Variables + get_default_env_vars()
+# =============================================================================
+# Usage: curl -H "Authorization: token YOUR_GITHUB_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - AGIXT_0530_1239_4 YOUR_GITHUB_TOKEN
+# =============================================================================
+
+# =============================================================================
+# CONFIGURATION BASE ISO + ACCÈS EXTERNE (conservé v1, v2, v3)
+# =============================================================================
+AGIXT_AUTO_UPDATE=true
+AGIXT_API_KEY=
+UVICORN_WORKERS=10
+WORKING_DIRECTORY=./WORKSPACE
+TEXTGEN_URI=http://text-generation-webui:5000
+AGIXT_URI=http://agixt:7437
+TZ=Europe/Paris
+AGIXT_SERVER=http://162.55.213.90:7437
+
+# =============================================================================
+# INTERFACE MANAGEMENT CORRIGÉE (CORRIGÉ v4)
+# =============================================================================
+APP_NAME=AGiXT Production Server
+APP_DESCRIPTION=AGiXT Production Server - AI Agent Automation Platform  
+APP_URI=http://162.55.213.90:3437
+AUTH_WEB=http://162.55.213.90:3437/user
+AGIXT_AGENT=XT
+AGIXT_SHOW_SELECTION=agent,conversation
+AGIXT_SHOW_AGENT_BAR=true
+AGIXT_SHOW_APP_BAR=true
+AGIXT_CONVERSATION_MODE=select
+INTERACTIVE_MODE=chat
+AUTH_PROVIDER=magicalauth
+THEME_NAME=doom
+AGIXT_FOOTER_MESSAGE=AGiXT Production Server - Powered by AI
+
+# =============================================================================
+# FONCTIONNALITÉS AVANCÉES (conservé v3)
+# =============================================================================
+AGIXT_FILE_UPLOAD_ENABLED=true
+AGIXT_VOICE_INPUT_ENABLED=true
+AGIXT_RLHF=true
+AGIXT_ALLOW_MESSAGE_EDITING=true
+AGIXT_ALLOW_MESSAGE_DELETION=true
+AGIXT_SHOW_OVERRIDE_SWITCHES=tts,websearch,analyze-user-input
+
+# =============================================================================
+# CRÉATION AUTOMATIQUE AGENTS (conservé v3)
+# =============================================================================
+CREATE_AGENT_ON_REGISTER=true
+CREATE_AGIXT_AGENT=true
+ALLOW_EMAIL_SIGN_IN=true
+
+# =============================================================================
+# CONFIGURATION SYSTÈME (conservé v3)
+# =============================================================================
+DATABASE_TYPE=sqlite
+DATABASE_NAME=models/agixt
+LOG_LEVEL=INFO
+LOG_FORMAT=%(asctime)s | %(levelname)s | %(message)s
+ALLOWED_DOMAINS=*
+
+# =============================================================================
+# AI PROVIDERS (Optionnel - laissé vide pour test initial)
+# =============================================================================
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+GOOGLE_API_KEY=
+
+# =============================================================================
+# NOTES IMPORTANTES v4
+# =============================================================================
+# 1. 🔧 AGIXT_SHOW_SELECTION corrigé: agent,conversation (ordre critique)
+# 2. ✅ INTERACTIVE_MODE=chat ajouté (obligatoire selon doc officielle)
+# 3. 🔒 AUTH_PROVIDER=magicalauth (syntax correcte)
+# 4. 📋 Variables basées sur documentation Environment Variables officielle
+# 5. 🎯 Configuration alignée sur get_default_env_vars() du script start.py
+# 6. 🚀 Interface management devrait maintenant être visible
+# 7. 👤 Création automatique agent AGiXT lors inscription
+# 8. 🎨 Interface complète avec tous sélecteurs et barres
