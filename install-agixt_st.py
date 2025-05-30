@@ -254,7 +254,6 @@ def start_agixt_services(install_path: str, config: Dict[str, str]) -> bool:
             cmd.extend(["--theme-name", config['THEME_NAME']])
         if config.get('AGIXT_SHOW_SELECTION'):
             cmd.extend(["--agixt-show-selection", config['AGIXT_SHOW_SELECTION']])
-        # SUPPRIMÉ: AUTH_PROVIDER et AUTH_WEB (non supportés par start.py)
         if config.get('INTERACTIVE_MODE'):
             cmd.extend(["--interactive-mode", config['INTERACTIVE_MODE']])
         if config.get('APP_NAME'):
@@ -304,17 +303,17 @@ def start_agixt_services(install_path: str, config: Dict[str, str]) -> bool:
         print(f"📝 Commande: {' '.join(cmd)}")
         print(f"⏰ Cela peut prendre plusieurs minutes...")
         
-        # Lancer start.py en arrière-plan avec nohup (PAS de timeout)
-        cmd_str = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
-        daemon_cmd = f"nohup {cmd_str} > start.log 2>&1 &"
+        # CORRECTION: Utiliser subprocess.Popen pour lancer en arrière-plan
+        # au lieu de nohup + shell=True qui cause des problèmes
+        with open('start.log', 'w') as log_file:
+            process = subprocess.Popen(
+                cmd,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=install_path
+            )
         
-        result = subprocess.run(
-            daemon_cmd,
-            shell=True,
-            cwd=install_path
-        )
-        
-        print("✅ AGiXT start.py lancé en arrière-plan")
+        print("✅ AGiXT start.py lancé en arrière-plan avec Popen")
         print("⏳ Attente du démarrage des services (90 secondes)...")
         time.sleep(90)
         
@@ -335,9 +334,6 @@ def start_agixt_services(install_path: str, config: Dict[str, str]) -> bool:
         
         return True
         
-    except subprocess.TimeoutExpired:
-        print("✅ start.py lancé en daemon (timeout normal)")
-        return True
     except Exception as e:
         print(f"❌ Erreur lors du démarrage d'AGiXT: {e}")
         return False
