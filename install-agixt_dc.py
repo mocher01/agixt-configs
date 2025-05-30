@@ -257,9 +257,37 @@ def modify_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
             f.write(content)
         print(f"📋 Backup created: {backup_file}")
         
-        # Create environment variables section for our custom variables
-        env_vars = []
+        # Identifier les variables déjà présentes dans le docker-compose.yml
+        existing_vars = set()
+        for line in content.split('\n'):
+            line = line.strip()
+            if ':' in line and not line.startswith('#'):
+                # Extraire le nom de variable (avant le :)
+                var_name = line.split(':')[0].strip()
+                if var_name.isupper() or var_name.startswith('AGIXT_'):
+                    existing_vars.add(var_name)
+        
+        print(f"🔍 Variables déjà présentes: {sorted(existing_vars)}")
+        
+        # Filtrer nos variables pour éviter les doublons
+        new_vars = {}
+        skipped_vars = []
         for key, value in config.items():
+            if key not in existing_vars:
+                new_vars[key] = value
+            else:
+                skipped_vars.append(key)
+        
+        if skipped_vars:
+            print(f"⚠️  Variables ignorées (déjà présentes): {skipped_vars}")
+        
+        if not new_vars:
+            print("✅ Aucune nouvelle variable à ajouter")
+            return True
+        
+        # Create environment variables section for NEW variables only
+        env_vars = []
+        for key, value in new_vars.items():
             env_vars.append(f"      {key}: ${{{key}:-{value}}}")
         
         custom_env_section = "\n".join(env_vars)
@@ -268,50 +296,32 @@ def modify_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
         lines = content.split('\n')
         new_lines = []
         in_agixtinteractive = False
-        in_environment = False
-        environment_added = False
+        environment_found = False
         
-        for line in lines:
+        for i, line in enumerate(lines):
             if 'agixtinteractive:' in line and not line.strip().startswith('#'):
                 in_agixtinteractive = True
                 new_lines.append(line)
             elif in_agixtinteractive and line.strip().startswith('environment:'):
-                in_environment = True
+                environment_found = True
                 new_lines.append(line)
                 # Add our custom environment variables right after environment:
                 new_lines.append("      # === CUSTOM CONFIGURATION VARIABLES ===")
                 new_lines.append(custom_env_section)
                 new_lines.append("      # === END CUSTOM VARIABLES ===")
-                environment_added = True
             elif in_agixtinteractive and line.strip() and not line.startswith('  ') and not line.startswith('\t'):
                 # We've exited the agixtinteractive service
                 in_agixtinteractive = False
-                in_environment = False
                 new_lines.append(line)
             else:
                 new_lines.append(line)
-        
-        # If we couldn't find environment section, add it
-        if in_agixtinteractive and not environment_added:
-            print("⚠️  No environment section found in agixtinteractive, adding one")
-            # Find the agixtinteractive service and add environment section
-            lines = new_lines
-            new_lines = []
-            for i, line in enumerate(lines):
-                new_lines.append(line)
-                if 'agixtinteractive:' in line and not line.strip().startswith('#'):
-                    # Add environment section after service declaration
-                    new_lines.append("    environment:")
-                    new_lines.append("      # === CUSTOM CONFIGURATION VARIABLES ===")
-                    new_lines.append(custom_env_section)
-                    new_lines.append("      # === END CUSTOM VARIABLES ===")
         
         # Write modified docker-compose.yml
         modified_content = '\n'.join(new_lines)
         with open(compose_file, 'w') as f:
             f.write(modified_content)
         
-        print(f"✅ Modified docker-compose.yml with {len(config)} environment variables")
+        print(f"✅ Modified docker-compose.yml with {len(new_vars)} NEW environment variables")
         return True
         
     except Exception as e:
