@@ -305,43 +305,38 @@ def start_agixt_services(install_path: str, config: Dict[str, str]) -> bool:
         
         print(f"🚀 Démarrage AGiXT avec la commande officielle start.py...")
         print(f"📝 Commande: {' '.join(cmd)}")
+        print(f"⏰ Cela peut prendre plusieurs minutes...")
         
-        # Utiliser subprocess.run avec liste d'arguments (plus sûr)
+        # Lancer start.py en arrière-plan avec nohup (PAS de timeout)
+        cmd_str = ' '.join([f'"{arg}"' if ' ' in arg else arg for arg in cmd])
+        daemon_cmd = f"nohup {cmd_str} > start.log 2>&1 &"
+        
         result = subprocess.run(
-            cmd,
-            cwd=install_path,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=60
+            daemon_cmd,
+            shell=True,
+            cwd=install_path
         )
         
-        if result.returncode == 0:
-            print("✅ AGiXT start.py lancé en mode daemon")
-            
-            # Attendre que les services soient prêts
-            print("⏳ Attente du démarrage des services (30 secondes)...")
-            time.sleep(30)
-            
-            # Vérifier les services via Docker
-            ps_result = subprocess.run(["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"], 
-                                     capture_output=True, text=True)
-            if ps_result.returncode == 0:
-                print(f"📊 État des containers Docker:\n{ps_result.stdout}")
-            
-            # Vérifier le fichier de log
-            log_file = os.path.join(install_path, "start.log")
-            if os.path.exists(log_file):
-                print("📝 Dernières lignes du log start.py:")
-                tail_result = subprocess.run(["tail", "-20", log_file], 
-                                           capture_output=True, text=True)
-                if tail_result.returncode == 0:
-                    print(tail_result.stdout)
-            
-            return True
-        else:
-            print(f"❌ Erreur lors du lancement du daemon start.py:")
-            return False
+        print("✅ AGiXT start.py lancé en arrière-plan")
+        print("⏳ Attente du démarrage des services (90 secondes)...")
+        time.sleep(90)
+        
+        # Vérifier les services via Docker
+        ps_result = subprocess.run(["docker", "compose", "ps"], 
+                                 capture_output=True, text=True, cwd=install_path)
+        if ps_result.returncode == 0:
+            print(f"📊 État des containers Docker:\n{ps_result.stdout}")
+        
+        # Vérifier le fichier de log
+        log_file = os.path.join(install_path, "start.log")
+        if os.path.exists(log_file):
+            print("📝 Dernières lignes du log start.py:")
+            tail_result = subprocess.run(["tail", "-10", log_file], 
+                                       capture_output=True, text=True)
+            if tail_result.returncode == 0:
+                print(tail_result.stdout)
+        
+        return True
         
     except subprocess.TimeoutExpired:
         print("✅ start.py lancé en daemon (timeout normal)")
