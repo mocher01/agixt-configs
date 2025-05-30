@@ -1,4 +1,43 @@
-#!/usr/bin/env python3
+def start_agixt_services(install_path: str) -> bool:
+    """Start AGiXT services using docker-compose"""
+    try:
+        os.chdir(install_path)
+        
+        print(f"🚀 Starting AGiXT services with enhanced configuration...")
+        result = subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            print("✅ AGiXT services started successfully")
+            print(f"📝 Output: {result.stdout}")
+            
+            # Wait for services to be ready
+            time.sleep(15)
+            
+            # Check service status
+            ps_result = subprocess.run(
+                ["docker", "compose", "ps"], 
+                capture_output=True, 
+                text=True
+            )
+            print(f"📊 Service status:\n{ps_result.stdout}")
+            
+            return True
+        else:
+            print(f"❌ Failed to start services:")
+            print(f"📝 Error: {result.stderr}")
+            return False
+        
+    except subprocess.TimeoutExpired:
+        print("⏰ Timeout starting AGiXT services (5 minutes)")
+        return False
+    except Exception as e:
+        print(f"❌ Error starting AGiXT services: {e}")
+        return False#!/usr/bin/env python3
 """
 AGiXT Automated Installer - VERSION 1 (Docker-compose override)
 ===============================================================
@@ -238,8 +277,42 @@ def setup_permissions(install_path: str):
         print(f"⚠️  Warning: Could not set permissions: {e}")
 
 
-def modify_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
-    """Modify docker-compose.yml to pass all our environment variables"""
+def get_missing_variables() -> Dict[str, str]:
+    """Get only the variables that are NOT in the official docker-compose.yml"""
+    return {
+        # Variables manquantes critiques pour l'interface
+        'AGIXT_SHOW_SELECTION': 'agent,conversation',
+        'AGIXT_SHOW_AGENT_BAR': 'true',
+        'AGIXT_SHOW_APP_BAR': 'true',
+        'THEME_NAME': 'doom',
+        'AUTH_PROVIDER': 'magicalauth',
+        'AUTH_WEB': 'http://162.55.213.90:3437/user',
+        
+        # Variables agents automatiques
+        'CREATE_AGENT_ON_REGISTER': 'true',
+        'CREATE_AGIXT_AGENT': 'true',
+        
+        # Variables système
+        'AGIXT_AUTO_UPDATE': 'true',
+        'AGIXT_BRANCH': 'stable',
+        'AGIXT_REQUIRE_API_KEY': 'false',
+        
+        # Variables base (pour service agixt)
+        'AGIXT_API_KEY': '',
+        'UVICORN_WORKERS': '10',
+        'WORKING_DIRECTORY': './WORKSPACE',
+        'TEXTGEN_URI': 'http://text-generation-webui:5000',
+        'AGIXT_URI': 'http://agixt:7437',
+        'DATABASE_TYPE': 'sqlite',
+        'DATABASE_NAME': 'models/agixt',
+        'LOG_LEVEL': 'INFO',
+        'LOG_FORMAT': '%(asctime)s | %(levelname)s | %(message)s',
+        'ALLOWED_DOMAINS': '*'
+    }
+
+
+def add_missing_variables_to_compose(install_path: str) -> bool:
+    """Add ONLY the missing variables to docker-compose.yml"""
     compose_file = os.path.join(install_path, "docker-compose.yml")
     
     if not os.path.exists(compose_file):
@@ -257,60 +330,40 @@ def modify_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
             f.write(content)
         print(f"📋 Backup created: {backup_file}")
         
-        # Identifier les variables déjà présentes dans le docker-compose.yml
-        existing_vars = set()
-        for line in content.split('\n'):
-            line = line.strip()
-            if ':' in line and not line.startswith('#'):
-                # Extraire le nom de variable (avant le :)
-                var_name = line.split(':')[0].strip()
-                if var_name.isupper() or var_name.startswith('AGIXT_'):
-                    existing_vars.add(var_name)
+        # Get only missing variables
+        missing_vars = get_missing_variables()
         
-        print(f"🔍 Variables déjà présentes: {sorted(existing_vars)}")
-        
-        # Filtrer nos variables pour éviter les doublons
-        new_vars = {}
-        skipped_vars = []
-        for key, value in config.items():
-            if key not in existing_vars:
-                new_vars[key] = value
-            else:
-                skipped_vars.append(key)
-        
-        if skipped_vars:
-            print(f"⚠️  Variables ignorées (déjà présentes): {skipped_vars}")
-        
-        if not new_vars:
-            print("✅ Aucune nouvelle variable à ajouter")
-            return True
-        
-        # Create environment variables section for NEW variables only
+        # Create environment variables section for missing variables
         env_vars = []
-        for key, value in new_vars.items():
+        for key, value in missing_vars.items():
             env_vars.append(f"      {key}: ${{{key}:-{value}}}")
         
-        custom_env_section = "\n".join(env_vars)
+        missing_env_section = "\n".join(env_vars)
         
-        # Find agixtinteractive service and add our environment variables
+        # Find agixtinteractive service and add missing variables at the END
         lines = content.split('\n')
         new_lines = []
         in_agixtinteractive = False
-        environment_found = False
+        added_vars = False
         
         for i, line in enumerate(lines):
             if 'agixtinteractive:' in line and not line.strip().startswith('#'):
                 in_agixtinteractive = True
                 new_lines.append(line)
-            elif in_agixtinteractive and line.strip().startswith('environment:'):
-                environment_found = True
-                new_lines.append(line)
-                # Add our custom environment variables right after environment:
-                new_lines.append("      # === CUSTOM CONFIGURATION VARIABLES ===")
-                new_lines.append(custom_env_section)
-                new_lines.append("      # === END CUSTOM VARIABLES ===")
+            elif in_agixtinteractive and line.strip().startswith('TZ:'):
+                # Add our missing variables BEFORE the last TZ line
+                new_lines.append("      # === MISSING VARIABLES ADDED ===")
+                new_lines.append(missing_env_section)
+                new_lines.append("      # === END MISSING VARIABLES ===")
+                new_lines.append(line)  # Add the TZ line
+                added_vars = True
             elif in_agixtinteractive and line.strip() and not line.startswith('  ') and not line.startswith('\t'):
                 # We've exited the agixtinteractive service
+                if not added_vars:
+                    # Add variables before exiting if we haven't added them yet
+                    new_lines.append("      # === MISSING VARIABLES ADDED ===")
+                    new_lines.append(missing_env_section)
+                    new_lines.append("      # === END MISSING VARIABLES ===")
                 in_agixtinteractive = False
                 new_lines.append(line)
             else:
@@ -321,56 +374,11 @@ def modify_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
         with open(compose_file, 'w') as f:
             f.write(modified_content)
         
-        print(f"✅ Modified docker-compose.yml with {len(new_vars)} NEW environment variables")
+        print(f"✅ Added {len(missing_vars)} missing variables to docker-compose.yml")
         return True
         
     except Exception as e:
-        print(f"❌ Failed to modify docker-compose.yml: {e}")
-        return False
-
-
-def start_agixt_services(install_path: str) -> bool:
-    """Start AGiXT services using docker-compose"""
-    try:
-        os.chdir(install_path)
-        
-        # Always use default docker-compose.yml
-        compose_file = "docker-compose.yml"
-        
-        print(f"🚀 Starting AGiXT services...")
-        result = subprocess.run(
-            ["docker", "compose", "-f", compose_file, "up", "-d"],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result.returncode == 0:
-            print("✅ AGiXT services started successfully")
-            print(f"📝 Output: {result.stdout}")
-            
-            # Wait for services to be ready
-            time.sleep(15)
-            
-            # Check service status
-            ps_result = subprocess.run(
-                ["docker", "compose", "ps"], 
-                capture_output=True, 
-                text=True
-            )
-            print(f"📊 Service status:\n{ps_result.stdout}")
-            
-            return True
-        else:
-            print(f"❌ Failed to start services:")
-            print(f"📝 Error: {result.stderr}")
-            return False
-        
-    except subprocess.TimeoutExpired:
-        print("⏰ Timeout starting AGiXT services (5 minutes)")
-        return False
-    except Exception as e:
-        print(f"❌ Error starting AGiXT services: {e}")
+        print(f"❌ Failed to add missing variables: {e}")
         return False
 
 
@@ -457,9 +465,9 @@ def main():
     print(f"\n🔄 Step 4/6: Setting up permissions...")
     setup_permissions(install_path)
     
-    print(f"\n🔄 Step 5/6: Modifying docker-compose.yml...")
-    if not modify_docker_compose(install_path, config):
-        print("❌ Failed to modify docker-compose.yml")
+    print(f"\n🔄 Step 5/6: Adding missing variables to docker-compose.yml...")
+    if not add_missing_variables_to_compose(install_path):
+        print("❌ Failed to add missing variables to docker-compose.yml")
         sys.exit(1)
     
     print(f"\n🔄 Step 6/6: Starting AGiXT services...")
