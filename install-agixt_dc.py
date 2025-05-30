@@ -1,62 +1,25 @@
-def start_agixt_services(install_path: str) -> bool:
-    """Start AGiXT services using docker-compose"""
-    try:
-        os.chdir(install_path)
-        
-        print(f"🚀 Starting AGiXT services with enhanced configuration...")
-        result = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result.returncode == 0:
-            print("✅ AGiXT services started successfully")
-            print(f"📝 Output: {result.stdout}")
-            
-            # Wait for services to be ready
-            time.sleep(15)
-            
-            # Check service status
-            ps_result = subprocess.run(
-                ["docker", "compose", "ps"], 
-                capture_output=True, 
-                text=True
-            )
-            print(f"📊 Service status:\n{ps_result.stdout}")
-            
-            return True
-        else:
-            print(f"❌ Failed to start services:")
-            print(f"📝 Error: {result.stderr}")
-            return False
-        
-    except subprocess.TimeoutExpired:
-        print("⏰ Timeout starting AGiXT services (5 minutes)")
-        return False
-    except Exception as e:
-        print(f"❌ Error starting AGiXT services: {e}")
-        return False#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
-AGiXT Automated Installer - VERSION 1 (Docker-compose override)
-===============================================================
+AGiXT Automated Installer - VERSION 1 (Docker-compose override) + GraphQL Support
+==================================================================================
 
 Cette version modifie le docker-compose.yml pour passer TOUTES les variables .env
-aux containers, résolvant ainsi le problème d'interface management.
+aux containers ET inclut les fixes GraphQL nécessaires.
 
 Usage:
   curl -H "Authorization: token YOUR_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt_dc.py | python3 - CONFIG_NAME GITHUB_TOKEN
 
 Example:
-  curl -H "Authorization: token github_pat_xxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt_dc.py | python3 - AGIXT_0530_1239_4 github_pat_xxx
+  curl -H "Authorization: token github_pat_xxx" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt_dc.py | python3 - AGIXT_0530_1239_5 github_pat_xxx
 
 Features:
 - ✅ Configuration complète intégrée (pas de téléchargement externe)
 - ✅ Modification docker-compose.yml pour passer toutes variables
 - ✅ Interface management complète activée
+- ✅ Support GraphQL avec dependencies automatiques
 - ✅ Thème doom et fonctionnalités avancées
 - ✅ Compatible curl pipe
+- ✅ Fixes automatiques pour GraphQL endpoint
 """
 
 import os
@@ -236,7 +199,11 @@ def get_env_config() -> Dict[str, str]:
         'LOG_FORMAT': '%(asctime)s | %(levelname)s | %(message)s',
         'ALLOWED_DOMAINS': '*',
         'AGIXT_BRANCH': 'stable',
-        'AGIXT_REQUIRE_API_KEY': 'false'
+        'AGIXT_REQUIRE_API_KEY': 'false',
+        
+        # GraphQL Support - NOUVEAU
+        'GRAPHIQL': 'true',
+        'ENABLE_GRAPHQL': 'true'
     }
 
 
@@ -250,7 +217,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write("# AGiXT Server Configuration - AUTO GENERATED\n")
             f.write("# =============================================================================\n")
             f.write(f"# Generated on: {datetime.now().isoformat()}\n")
-            f.write("# Configuration: Complete with Interface Management\n")
+            f.write("# Configuration: Complete with Interface Management + GraphQL\n")
             f.write("# =============================================================================\n\n")
             
             for key, value in config.items():
@@ -307,7 +274,11 @@ def get_missing_variables() -> Dict[str, str]:
         'DATABASE_NAME': 'models/agixt',
         'LOG_LEVEL': 'INFO',
         'LOG_FORMAT': '%(asctime)s | %(levelname)s | %(message)s',
-        'ALLOWED_DOMAINS': '*'
+        'ALLOWED_DOMAINS': '*',
+        
+        # GraphQL Support - NOUVEAU
+        'GRAPHIQL': 'true',
+        'ENABLE_GRAPHQL': 'true'
     }
 
 
@@ -382,6 +353,178 @@ def add_missing_variables_to_compose(install_path: str) -> bool:
         return False
 
 
+def add_graphql_volume_mount(install_path: str) -> bool:
+    """Add volume mount for agixt directory to ensure latest code is used"""
+    compose_file = os.path.join(install_path, "docker-compose.yml")
+    
+    try:
+        with open(compose_file, 'r') as f:
+            content = f.read()
+        
+        # Check if volume mount already exists
+        if './agixt:/agixt' in content:
+            print("ℹ️  AGiXT volume mount already exists")
+            return True
+        
+        # Find agixt service volumes section
+        lines = content.split('\n')
+        new_lines = []
+        in_agixt_service = False
+        volumes_section_found = False
+        
+        for line in lines:
+            new_lines.append(line)
+            
+            # Detect agixt service
+            if line.strip().startswith('agixt:') and not line.strip().startswith('#'):
+                in_agixt_service = True
+            elif in_agixt_service and line.strip().startswith('volumes:'):
+                volumes_section_found = True
+            elif in_agixt_service and volumes_section_found and line.strip().startswith('- ./models:/agixt/models'):
+                # Add our volume mount after the models mount
+                new_lines.append("      - ./agixt:/agixt  # Mount latest agixt code for GraphQL support")
+            elif in_agixt_service and line.strip() and not line.startswith('  ') and not line.startswith('\t') and not line.strip().startswith('-'):
+                # We've exited the agixt service
+                in_agixt_service = False
+                volumes_section_found = False
+        
+        # Write modified content
+        modified_content = '\n'.join(new_lines)
+        with open(compose_file, 'w') as f:
+            f.write(modified_content)
+        
+        print("✅ Added AGiXT volume mount for latest code")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to add volume mount: {e}")
+        return False
+
+
+def install_graphql_dependencies(install_path: str) -> bool:
+    """Install GraphQL dependencies in the AGiXT container after startup"""
+    print("🔧 Installing GraphQL dependencies...")
+    
+    try:
+        # Wait for container to be fully ready
+        time.sleep(30)
+        
+        # Get container name
+        result = subprocess.run(
+            ["docker", "compose", "ps", "-q", "agixt"],
+            cwd=install_path,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print("⚠️  Could not find agixt container")
+            return False
+        
+        container_id = result.stdout.strip()
+        if not container_id:
+            print("⚠️  AGiXT container not running")
+            return False
+        
+        # Install strawberry-graphql
+        print("📦 Installing strawberry-graphql...")
+        result = subprocess.run(
+            ["docker", "exec", container_id, "pip", "install", "strawberry-graphql"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0:
+            print("✅ Strawberry GraphQL installed")
+        else:
+            print(f"⚠️  Warning: Could not install strawberry-graphql: {result.stderr}")
+        
+        # Install broadcaster
+        print("📦 Installing broadcaster...")
+        result = subprocess.run(
+            ["docker", "exec", container_id, "pip", "install", "broadcaster"],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0:
+            print("✅ Broadcaster installed")
+        else:
+            print(f"⚠️  Warning: Could not install broadcaster: {result.stderr}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"⚠️  Could not install GraphQL dependencies: {e}")
+        return False
+
+
+def start_agixt_services(install_path: str) -> bool:
+    """Start AGiXT services using docker-compose"""
+    try:
+        os.chdir(install_path)
+        
+        print(f"🚀 Starting AGiXT services with enhanced configuration...")
+        result = subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            print("✅ AGiXT services started successfully")
+            print(f"📝 Output: {result.stdout}")
+            
+            # Install GraphQL dependencies
+            print("\n🔧 Installing GraphQL dependencies...")
+            install_graphql_dependencies(install_path)
+            
+            # Wait for services to be ready
+            print("⏳ Waiting for services to be ready...")
+            time.sleep(45)
+            
+            # Restart agixt service to load GraphQL dependencies
+            print("🔄 Restarting AGiXT service to load GraphQL...")
+            restart_result = subprocess.run(
+                ["docker", "compose", "restart", "agixt"],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if restart_result.returncode == 0:
+                print("✅ AGiXT service restarted with GraphQL support")
+            else:
+                print(f"⚠️  Warning: Could not restart AGiXT service: {restart_result.stderr}")
+            
+            # Final wait
+            time.sleep(30)
+            
+            # Check service status
+            ps_result = subprocess.run(
+                ["docker", "compose", "ps"], 
+                capture_output=True, 
+                text=True
+            )
+            print(f"📊 Service status:\n{ps_result.stdout}")
+            
+            return True
+        else:
+            print(f"❌ Failed to start services:")
+            print(f"📝 Error: {result.stderr}")
+            return False
+        
+    except subprocess.TimeoutExpired:
+        print("⏰ Timeout starting AGiXT services (5 minutes)")
+        return False
+    except Exception as e:
+        print(f"❌ Error starting AGiXT services: {e}")
+        return False
+
+
 def verify_installation(install_path: str):
     """Verify the installation is working"""
     print("\n🔍 Verifying installation...")
@@ -405,13 +548,33 @@ def verify_installation(install_path: str):
         ports_to_check = [3437, 7437]
         for port in ports_to_check:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(3)
+            sock.settimeout(5)
             result = sock.connect_ex(('localhost', port))
             if result == 0:
                 print(f"✅ Port {port} is accessible")
             else:
-                print(f"⚠️  Port {port} is not accessible yet")
+                print(f"⚠️  Port {port} is not accessible yet (services may still be starting)")
             sock.close()
+        
+        # Test GraphQL endpoint
+        print("\n🧪 Testing GraphQL endpoint...")
+        try:
+            import urllib.request
+            import urllib.error
+            
+            req = urllib.request.Request('http://localhost:7437/graphql')
+            try:
+                response = urllib.request.urlopen(req, timeout=5)
+                print("✅ GraphQL endpoint is accessible")
+            except urllib.error.HTTPError as e:
+                if e.code == 405:  # Method Not Allowed for GET request is expected
+                    print("✅ GraphQL endpoint is accessible (GET method not allowed - normal)")
+                else:
+                    print(f"⚠️  GraphQL endpoint returned HTTP {e.code}")
+            except Exception as e:
+                print(f"⚠️  GraphQL endpoint not accessible: {e}")
+        except ImportError:
+            print("⚠️  Could not test GraphQL endpoint (urllib not available)")
             
     except Exception as e:
         print(f"⚠️  Could not verify installation: {e}")
@@ -420,12 +583,12 @@ def verify_installation(install_path: str):
 def main():
     """Main installation function"""
     print("╔═══════════════════════════════════════════════════════════════╗")
-    print("║            AGiXT Installer - Version 1 (Override)            ║")
+    print("║          AGiXT Installer - Version 1 (GraphQL Enhanced)      ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     
     if len(sys.argv) < 2:
         print("❌ Usage: python3 - CONFIG_NAME [GITHUB_TOKEN]")
-        print("📝 Example: curl -sSL script.py | python3 - AGIXT_0530_1239_4 github_token")
+        print("📝 Example: curl -sSL script.py | python3 - AGIXT_0530_1239_5 github_token")
         sys.exit(1)
     
     config_name = sys.argv[1]
@@ -447,40 +610,49 @@ def main():
         sys.exit(1)
     
     # Installation steps
-    print("\n🔄 Step 1/6: Cleaning previous installations...")
+    print("\n🔄 Step 1/8: Cleaning previous installations...")
     cleanup_previous_installations()
     
     install_path = create_installation_directory(config_name)
     if not install_path:
         sys.exit(1)
     
-    print(f"\n🔄 Step 2/6: Cloning AGiXT repository...")
+    print(f"\n🔄 Step 2/8: Cloning AGiXT repository...")
     if not clone_agixt_repository(install_path, github_token):
         sys.exit(1)
     
-    print(f"\n🔄 Step 3/6: Creating .env file...")
+    print(f"\n🔄 Step 3/8: Creating .env file...")
     if not create_env_file(install_path, config):
         sys.exit(1)
     
-    print(f"\n🔄 Step 4/6: Setting up permissions...")
+    print(f"\n🔄 Step 4/8: Setting up permissions...")
     setup_permissions(install_path)
     
-    print(f"\n🔄 Step 5/6: Adding missing variables to docker-compose.yml...")
+    print(f"\n🔄 Step 5/8: Adding missing variables to docker-compose.yml...")
     if not add_missing_variables_to_compose(install_path):
         print("❌ Failed to add missing variables to docker-compose.yml")
         sys.exit(1)
     
-    print(f"\n🔄 Step 6/6: Starting AGiXT services...")
+    print(f"\n🔄 Step 6/8: Adding GraphQL volume mount...")
+    if not add_graphql_volume_mount(install_path):
+        print("⚠️  Warning: Could not add GraphQL volume mount")
+    
+    print(f"\n🔄 Step 7/8: Starting AGiXT services...")
     if not start_agixt_services(install_path):
         print("❌ Failed to start services")
         sys.exit(1)
+    
+    print(f"\n🔄 Step 8/8: Verifying installation...")
+    verify_installation(install_path)
     
     print(f"\n✅ Installation completed successfully!")
     print(f"📁 Directory: {install_path}")
     print(f"🌐 AGiXT Interface: http://162.55.213.90:3437")
     print(f"🔧 AGiXT API: http://162.55.213.90:7437")
+    print(f"🧬 GraphQL Endpoint: http://162.55.213.90:7437/graphql")
     print(f"📋 Management: docker compose -C {install_path} ps")
-    print(f"📝 Logs: docker compose -C {install_path} logs -f")
+    print(f"📝 Logs: docker compose -C {install_path} logs -f agixt")
+    print(f"⚠️  Note: Services may take 1-2 minutes to be fully ready")
 
 
 if __name__ == "__main__":
