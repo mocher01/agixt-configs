@@ -167,7 +167,7 @@ def get_env_config() -> Dict[str, str]:
         
         # Interface complète
         'APP_NAME': 'AGiXT Production Server v2',
-        'APP_DESCRIPTION': 'AGiXT Production Server v2 - AI Agent Automation Platform (start.py method)',
+        'APP_DESCRIPTION': 'AGiXT Production Server v2 - AI Agent Automation Platform',
         'APP_URI': 'http://162.55.213.90:3437',
         'AUTH_WEB': 'http://162.55.213.90:3437/user',
         'AGIXT_AGENT': 'XT',
@@ -306,16 +306,14 @@ def start_agixt_services(install_path: str, config: Dict[str, str]) -> bool:
         print(f"🚀 Démarrage AGiXT avec la commande officielle start.py...")
         print(f"📝 Commande: {' '.join(cmd)}")
         
-        # Exécuter start.py avec toutes nos options en mode daemon
-        # Utiliser nohup pour que le processus continue même si le terminal se ferme
-        cmd_str = ' '.join(cmd)
-        daemon_cmd = f"nohup {cmd_str} > start.log 2>&1 &"
-        
+        # Utiliser subprocess.run avec liste d'arguments (plus sûr)
         result = subprocess.run(
-            daemon_cmd,
-            shell=True,
+            cmd,
             cwd=install_path,
-            timeout=60  # Timeout plus court car on lance en daemon
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60
         )
         
         if result.returncode == 0:
