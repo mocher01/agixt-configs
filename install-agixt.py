@@ -295,7 +295,7 @@ def get_env_config() -> Dict[str, str]:
         'EZLOCALAI_VOICE': 'DukeNukem',
         
         # EzLocalAI Server Configuration
-        'DEFAULT_MODEL': 'Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/qwen2.5-coder-7b-instruct-q4_k_m.gguf',
+        'DEFAULT_MODEL': 'Qwen/Qwen2.5-Coder-7B-Instruct-GGUF',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -389,14 +389,14 @@ services:
     container_name: ezlocalai
     restart: unless-stopped
     environment:
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/qwen2.5-coder-7b-instruct-q4_k_m.gguf}
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-16384}
-      - THREADS=${THREADS:-3}
-      - GPU_LAYERS=${GPU_LAYERS:-0}
-      - WHISPER_MODEL=${WHISPER_MODEL:-base.en}
-      - IMG_ENABLED=${IMG_ENABLED:-false}
-      - AUTO_UPDATE=${AUTO_UPDATE:-true}
-      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY:-agixt-automation-key}
+      - DEFAULT_MODEL=${DEFAULT_MODEL}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
+      - THREADS=${THREADS}
+      - GPU_LAYERS=${GPU_LAYERS}
+      - WHISPER_MODEL=${WHISPER_MODEL}
+      - IMG_ENABLED=${IMG_ENABLED}
+      - AUTO_UPDATE=${AUTO_UPDATE}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
       - EZLOCALAI_URL=http://ezlocalai:8091
     ports:
       - "8091:8091"
@@ -414,24 +414,28 @@ services:
     depends_on:
       - ezlocalai
     environment:
-      # Pass ALL environment variables from .env
+      # Version & Basic Configuration
       - AGIXT_VERSION=${AGIXT_VERSION}
-      - AGIXT_AUTO_UPDATE=${AGIXT_AUTO_UPDATE:-true}
+      - INSTALL_DATE=${INSTALL_DATE}
+      - AGIXT_AUTO_UPDATE=${AGIXT_AUTO_UPDATE}
       - AGIXT_API_KEY=${AGIXT_API_KEY}
-      - UVICORN_WORKERS=${UVICORN_WORKERS:-6}
-      - WORKING_DIRECTORY=${WORKING_DIRECTORY:-./WORKSPACE}
-      - TZ=${TZ:-UTC}
+      - UVICORN_WORKERS=${UVICORN_WORKERS}
+      - WORKING_DIRECTORY=${WORKING_DIRECTORY}
+      - TZ=${TZ}
+      # URLs
       - AGIXT_SERVER=${AGIXT_SERVER}
-      - AGIXT_URI=${AGIXT_URI:-http://agixt:7437}
-      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - DATABASE_NAME=${DATABASE_NAME:-models/agixt}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - AGIXT_URI=${AGIXT_URI}
+      # System Configuration
+      - DATABASE_TYPE=${DATABASE_TYPE}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
       - LOG_FORMAT=${LOG_FORMAT}
-      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-*}
-      - AGIXT_BRANCH=${AGIXT_BRANCH:-stable}
-      - AGIXT_REQUIRE_API_KEY=${AGIXT_REQUIRE_API_KEY:-false}
-      - GRAPHIQL=${GRAPHIQL:-true}
-      - ENABLE_GRAPHQL=${ENABLE_GRAPHQL:-true}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS}
+      - AGIXT_BRANCH=${AGIXT_BRANCH}
+      - AGIXT_REQUIRE_API_KEY=${AGIXT_REQUIRE_API_KEY}
+      # GraphQL Support
+      - GRAPHIQL=${GRAPHIQL}
+      - ENABLE_GRAPHQL=${ENABLE_GRAPHQL}
       # EzLocalAI Integration
       - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
       - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
@@ -440,7 +444,7 @@ services:
       - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
       - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
       - EZLOCALAI_VOICE=${EZLOCALAI_VOICE}
-      # External services
+      # External Services
       - TEXTGEN_URI=${TEXTGEN_URI}
       - N8N_URI=${N8N_URI}
     ports:
@@ -448,7 +452,7 @@ services:
     volumes:
       - ./models:/agixt/models
       - ./WORKSPACE:/agixt/WORKSPACE
-      - ./agixt:/agixt  # Mount latest code for GraphQL
+      - ./agixt:/agixt
     networks:
       - agixt-network
 
@@ -460,35 +464,35 @@ services:
     depends_on:
       - agixt
     environment:
-      # Interface configuration
-      - APP_NAME=${APP_NAME:-AGiXT Production Server v1.1-proxy}
+      # Interface Configuration
+      - APP_NAME=${APP_NAME}
       - APP_DESCRIPTION=${APP_DESCRIPTION}
       - APP_URI=${APP_URI}
       - AUTH_WEB=${AUTH_WEB}
-      - AGIXT_AGENT=${AGIXT_AGENT:-CodeAssistant}
-      - AGIXT_SHOW_SELECTION=${AGIXT_SHOW_SELECTION:-agent,conversation}
-      - AGIXT_SHOW_AGENT_BAR=${AGIXT_SHOW_AGENT_BAR:-true}
-      - AGIXT_SHOW_APP_BAR=${AGIXT_SHOW_APP_BAR:-true}
-      - AGIXT_CONVERSATION_MODE=${AGIXT_CONVERSATION_MODE:-select}
-      - INTERACTIVE_MODE=${INTERACTIVE_MODE:-chat}
-      - THEME_NAME=${THEME_NAME:-doom}
+      - AGIXT_AGENT=${AGIXT_AGENT}
+      - AGIXT_SHOW_SELECTION=${AGIXT_SHOW_SELECTION}
+      - AGIXT_SHOW_AGENT_BAR=${AGIXT_SHOW_AGENT_BAR}
+      - AGIXT_SHOW_APP_BAR=${AGIXT_SHOW_APP_BAR}
+      - AGIXT_CONVERSATION_MODE=${AGIXT_CONVERSATION_MODE}
+      - INTERACTIVE_MODE=${INTERACTIVE_MODE}
+      - THEME_NAME=${THEME_NAME}
       - AGIXT_FOOTER_MESSAGE=${AGIXT_FOOTER_MESSAGE}
       # Authentication
-      - AUTH_PROVIDER=${AUTH_PROVIDER:-magicalauth}
-      - CREATE_AGENT_ON_REGISTER=${CREATE_AGENT_ON_REGISTER:-true}
-      - CREATE_AGIXT_AGENT=${CREATE_AGIXT_AGENT:-true}
-      - ALLOW_EMAIL_SIGN_IN=${ALLOW_EMAIL_SIGN_IN:-true}
+      - AUTH_PROVIDER=${AUTH_PROVIDER}
+      - CREATE_AGENT_ON_REGISTER=${CREATE_AGENT_ON_REGISTER}
+      - CREATE_AGIXT_AGENT=${CREATE_AGIXT_AGENT}
+      - ALLOW_EMAIL_SIGN_IN=${ALLOW_EMAIL_SIGN_IN}
       # Features
-      - AGIXT_FILE_UPLOAD_ENABLED=${AGIXT_FILE_UPLOAD_ENABLED:-true}
-      - AGIXT_VOICE_INPUT_ENABLED=${AGIXT_VOICE_INPUT_ENABLED:-true}
-      - AGIXT_RLHF=${AGIXT_RLHF:-true}
-      - AGIXT_ALLOW_MESSAGE_EDITING=${AGIXT_ALLOW_MESSAGE_EDITING:-true}
-      - AGIXT_ALLOW_MESSAGE_DELETION=${AGIXT_ALLOW_MESSAGE_DELETION:-true}
+      - AGIXT_FILE_UPLOAD_ENABLED=${AGIXT_FILE_UPLOAD_ENABLED}
+      - AGIXT_VOICE_INPUT_ENABLED=${AGIXT_VOICE_INPUT_ENABLED}
+      - AGIXT_RLHF=${AGIXT_RLHF}
+      - AGIXT_ALLOW_MESSAGE_EDITING=${AGIXT_ALLOW_MESSAGE_EDITING}
+      - AGIXT_ALLOW_MESSAGE_DELETION=${AGIXT_ALLOW_MESSAGE_DELETION}
       - AGIXT_SHOW_OVERRIDE_SWITCHES=${AGIXT_SHOW_OVERRIDE_SWITCHES}
-      # Backend connection
+      # Backend Connection
       - AGIXT_SERVER=${AGIXT_SERVER}
       - AGIXT_URI=http://agixt:7437
-      - TZ=${TZ:-UTC}
+      - TZ=${TZ}
     ports:
       - "3437:3437"
     volumes:
@@ -508,107 +512,252 @@ services:
         log(f"Failed to update docker-compose.yml: {e}", "ERROR")
         return False
 
+def monitor_ezlocalai_startup(install_path: str) -> bool:
+    """Monitor EzLocalAI startup with detailed real-time logging"""
+    log("🤖 Starting EzLocalAI monitoring...", "INFO")
+    log("This will show real-time progress of model download and startup", "INFO")
+    
+    max_wait_time = 1200  # 20 minutes
+    check_interval = 10   # Check every 10 seconds
+    elapsed_time = 0
+    
+    log(f"⏱️  Maximum wait time: {max_wait_time//60} minutes", "INFO")
+    log(f"📊 Check interval: {check_interval} seconds", "INFO")
+    
+    while elapsed_time < max_wait_time:
+        # Get container status
+        container_status = get_container_status("ezlocalai")
+        
+        # Get latest logs (last 5 lines)
+        latest_logs = get_container_logs("ezlocalai", lines=5)
+        
+        # Calculate progress
+        minutes_elapsed = elapsed_time // 60
+        seconds_elapsed = elapsed_time % 60
+        
+        log(f"⏰ [{minutes_elapsed:02d}:{seconds_elapsed:02d}] Container: {container_status}", "INFO")
+        
+        # Show latest log lines if they contain useful info
+        if latest_logs:
+            for line in latest_logs:
+                if any(keyword in line.lower() for keyword in ['downloading', 'loading', 'model', 'error', 'ready', 'started']):
+                    log(f"📜 EzLocalAI: {line.strip()}", "INFO")
+        
+        # Check if startup is successful
+        if container_status == "running":
+            # Try to hit the health endpoint
+            try:
+                import urllib.request
+                req = urllib.request.Request('http://localhost:8091/health', timeout=5)
+                response = urllib.request.urlopen(req)
+                if response.getcode() == 200:
+                    log("✅ EzLocalAI is ready and responding!", "SUCCESS")
+                    return True
+            except Exception:
+                pass  # Still starting up
+        
+        # Check for failure conditions
+        if container_status in ["exited", "dead"]:
+            log("❌ EzLocalAI container has stopped - checking exit reason...", "ERROR")
+            exit_logs = get_container_logs("ezlocalai", lines=20)
+            for line in exit_logs:
+                if any(keyword in line.lower() for keyword in ['error', 'exception', 'failed', 'traceback']):
+                    log(f"💥 Error: {line.strip()}", "ERROR")
+            return False
+        
+        # Show download progress if available
+        if latest_logs:
+            for line in latest_logs:
+                if 'downloading' in line.lower() and any(char.isdigit() for char in line):
+                    log(f"📥 Download progress: {line.strip()}", "INFO")
+        
+        time.sleep(check_interval)
+        elapsed_time += check_interval
+    
+    log(f"⏰ Timeout after {max_wait_time//60} minutes", "WARN")
+    log("EzLocalAI may still be downloading in the background", "INFO")
+    return False
+
+def get_container_status(container_name: str) -> str:
+    """Get the current status of a container"""
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", container_name, "--format", "{{.State.Status}}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+        return "not_found"
+    except Exception:
+        return "unknown"
+
+def get_container_logs(container_name: str, lines: int = 10) -> list:
+    """Get the latest logs from a container"""
+    try:
+        result = subprocess.run(
+            ["docker", "logs", container_name, "--tail", str(lines), "--timestamps"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip().split('\n') if result.stdout.strip() else []
+        return []
+    except Exception:
+        return []
 def install_dependencies_and_start(install_path: str) -> bool:
-    """Install dependencies and start all services with better progress tracking"""
+    """Install dependencies and start all services with detailed monitoring"""
     try:
         os.chdir(install_path)
         
-        log("Starting AGiXT v1.1-proxy services...")
-        log("⚠️  This will download CodeQwen2.5-7B model (~4GB) - may take 10-15 minutes", "INFO")
+        log("🚀 Starting AGiXT v1.1-proxy services...", "INFO")
+        log("📋 Configuration loaded from .env file", "INFO")
+        log("⚠️  EzLocalAI will download CodeQwen2.5-7B model (~4GB)", "INFO")
+        log("⏱️  This may take 10-20 minutes depending on internet speed", "INFO")
         
+        # Show current configuration before starting
+        log("🔍 Verifying configuration...", "INFO")
+        env_check = verify_env_configuration(install_path)
+        if not env_check:
+            log("⚠️  Configuration issues detected, but continuing...", "WARN")
+        
+        log("🐳 Starting Docker Compose services...", "INFO")
         result = subprocess.run(
             ["docker", "compose", "up", "-d"],
             capture_output=True,
             text=True,
-            timeout=900  # 15 minutes for model download
+            timeout=300
         )
         
         if result.returncode == 0:
-            log("Docker Compose started successfully", "SUCCESS")
-            if result.stdout:
-                log(f"Output: {result.stdout}")
+            log("✅ Docker Compose started successfully", "SUCCESS")
+            if result.stdout.strip():
+                log(f"📝 Output: {result.stdout.strip()}", "INFO")
             
-            log("Waiting for EzLocalAI model download...")
-            log("You can monitor progress with: docker logs ezlocalai -f", "INFO")
+            # Show service status
+            log("📊 Checking service status...", "INFO")
+            status_result = subprocess.run(
+                ["docker", "compose", "ps", "--format", "table"],
+                cwd=install_path,
+                capture_output=True,
+                text=True
+            )
+            if status_result.returncode == 0 and status_result.stdout.strip():
+                log("🐳 Container Status:", "INFO")
+                for line in status_result.stdout.strip().split('\n'):
+                    log(f"   {line}", "INFO")
             
-            # Monitor EzLocalAI startup with better feedback
-            max_wait_time = 900  # 15 minutes
-            wait_interval = 30   # Check every 30 seconds
-            elapsed_time = 0
+            # Monitor EzLocalAI startup with detailed logging
+            log("🤖 Starting EzLocalAI monitoring and model download...", "INFO")
+            log("💡 You can also monitor with: docker logs ezlocalai -f", "INFO")
             
-            while elapsed_time < max_wait_time:
-                log(f"Checking EzLocalAI status... ({elapsed_time//60}m {elapsed_time%60}s elapsed)")
+            ezlocalai_ready = monitor_ezlocalai_startup(install_path)
+            
+            if ezlocalai_ready:
+                log("✅ EzLocalAI startup completed successfully!", "SUCCESS")
+            else:
+                log("⚠️  EzLocalAI startup monitoring timed out", "WARN")
+                log("🔍 Checking if model is still downloading...", "INFO")
+                logs = get_container_logs("ezlocalai", lines=10)
+                for line in logs:
+                    if 'downloading' in line.lower():
+                        log("📥 Model download appears to be in progress", "INFO")
+                        break
+            
+            # Install GraphQL dependencies
+            log("🔧 Installing GraphQL dependencies...", "INFO")
+            graphql_success = install_graphql_dependencies(install_path)
+            
+            if graphql_success:
+                log("✅ GraphQL dependencies installed", "SUCCESS")
                 
-                # Check container status
-                status_result = subprocess.run(
-                    ["docker", "inspect", "ezlocalai", "--format", "{{.State.Health.Status}}"],
+                # Restart AGiXT to load GraphQL
+                log("🔄 Restarting AGiXT to load GraphQL...", "INFO")
+                restart_result = subprocess.run(
+                    ["docker", "compose", "restart", "agixt"],
                     capture_output=True,
-                    text=True
+                    text=True,
+                    timeout=60
                 )
                 
-                if status_result.returncode == 0:
-                    health_status = status_result.stdout.strip()
-                    log(f"EzLocalAI health status: {health_status}")
-                    
-                    if health_status == "healthy":
-                        log("EzLocalAI is ready!", "SUCCESS")
-                        break
-                    elif health_status == "unhealthy":
-                        # Check logs for specific error
-                        log("EzLocalAI health check failed, checking logs...")
-                        logs_result = subprocess.run(
-                            ["docker", "logs", "ezlocalai", "--tail", "10"],
-                            capture_output=True,
-                            text=True
-                        )
-                        if "downloading" in logs_result.stdout.lower() or "loading" in logs_result.stdout.lower():
-                            log("Model still downloading/loading, continuing to wait...")
-                        else:
-                            log(f"EzLocalAI logs:\n{logs_result.stdout}", "WARN")
-                
-                time.sleep(wait_interval)
-                elapsed_time += wait_interval
+                if restart_result.returncode == 0:
+                    log("✅ AGiXT restarted successfully", "SUCCESS")
+                else:
+                    log(f"⚠️  AGiXT restart warning: {restart_result.stderr}", "WARN")
+            else:
+                log("⚠️  GraphQL dependencies installation had issues", "WARN")
             
-            if elapsed_time >= max_wait_time:
-                log("EzLocalAI startup timeout, but continuing installation...", "WARN")
-                log("You can check status later with: docker logs ezlocalai -f", "INFO")
+            # Final status check
+            log("🔍 Final system status check...", "INFO")
+            time.sleep(15)  # Wait for services to stabilize
             
-            # Install GraphQL dependencies in AGiXT container
-            log("Installing GraphQL dependencies...")
-            install_graphql_dependencies(install_path)
-            
-            # Restart AGiXT to load GraphQL
-            log("Restarting AGiXT with GraphQL support...")
-            restart_result = subprocess.run(
-                ["docker", "compose", "restart", "agixt"],
+            final_status = subprocess.run(
+                ["docker", "compose", "ps"],
+                cwd=install_path,
                 capture_output=True,
-                text=True,
-                timeout=120
+                text=True
             )
             
-            if restart_result.returncode == 0:
-                log("AGiXT service restarted successfully", "SUCCESS")
-            else:
-                log(f"Warning: Could not restart AGiXT service: {restart_result.stderr}", "WARN")
-            
-            # Final wait for services
-            log("Waiting for all services to be ready...")
-            time.sleep(30)
+            if final_status.returncode == 0:
+                log("📊 Final Service Status:", "INFO")
+                for line in final_status.stdout.strip().split('\n'):
+                    if line.strip():
+                        log(f"   {line}", "INFO")
             
             return True
+            
         else:
-            log(f"Failed to start services:", "ERROR")
-            log(f"Error output: {result.stderr}", "ERROR")
-            if result.stdout:
-                log(f"Standard output: {result.stdout}")
+            log("❌ Failed to start Docker Compose services", "ERROR")
+            log(f"💥 Error: {result.stderr}", "ERROR")
+            if result.stdout.strip():
+                log(f"📝 Output: {result.stdout.strip()}", "ERROR")
+            return False
+            
+    except subprocess.TimeoutExpired:
+        log("⏰ Docker Compose startup timeout", "ERROR")
+        log("🔍 Services may still be starting in background", "INFO")
+        return False
+    except Exception as e:
+        log(f"💥 Unexpected error during service startup: {e}", "ERROR")
+        return False
+
+def verify_env_configuration(install_path: str) -> bool:
+    """Verify that key configuration values are present"""
+    try:
+        env_file = os.path.join(install_path, ".env")
+        if not os.path.exists(env_file):
+            log("❌ .env file not found", "ERROR")
             return False
         
-    except subprocess.TimeoutExpired:
-        log("Service startup timeout (15 minutes) - model download may still be in progress", "WARN")
-        log("Check status with: docker compose ps && docker logs ezlocalai -f", "INFO")
-        return True  # Continue as download might still be happening
+        with open(env_file, 'r') as f:
+            env_content = f.read()
+        
+        required_vars = ['DEFAULT_MODEL', 'AGIXT_SERVER', 'APP_URI']
+        missing_vars = []
+        
+        for var in required_vars:
+            if f"{var}=" not in env_content:
+                missing_vars.append(var)
+        
+        if missing_vars:
+            log(f"⚠️  Missing required variables: {', '.join(missing_vars)}", "WARN")
+            return False
+        
+        # Show key configuration values
+        for line in env_content.split('\n'):
+            if line.startswith('DEFAULT_MODEL='):
+                log(f"🤖 Model: {line.split('=', 1)[1]}", "INFO")
+            elif line.startswith('AGIXT_SERVER='):
+                log(f"🔗 Backend: {line.split('=', 1)[1]}", "INFO")
+            elif line.startswith('APP_URI='):
+                log(f"🌐 Frontend: {line.split('=', 1)[1]}", "INFO")
+        
+        return True
+        
     except Exception as e:
-        log(f"Error starting services: {e}", "ERROR")
+        log(f"⚠️  Could not verify configuration: {e}", "WARN")
         return False
 
 def install_graphql_dependencies(install_path: str) -> bool:
