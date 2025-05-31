@@ -295,7 +295,7 @@ def get_env_config() -> Dict[str, str]:
         'EZLOCALAI_VOICE': 'DukeNukem',
         
         # EzLocalAI Server Configuration
-        'DEFAULT_MODEL': 'Qwen/CodeQwen2.5-7B-Instruct-GGUF',
+        'DEFAULT_MODEL': 'Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/qwen2.5-coder-7b-instruct-q4_k_m.gguf',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -390,7 +390,7 @@ services:
     container_name: ezlocalai
     restart: unless-stopped
     environment:
-      - DEFAULT_MODEL=${DEFAULT_MODEL:-Qwen/CodeQwen2.5-7B-Instruct-GGUF}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/qwen2.5-coder-7b-instruct-q4_k_m.gguf}
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-16384}
       - THREADS=${THREADS:-3}
       - GPU_LAYERS=${GPU_LAYERS:-0}
@@ -407,10 +407,11 @@ services:
     networks:
       - agixt-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8091/health"]
-      interval: 30s
+      test: ["CMD-SHELL", "curl -f http://localhost:8091/health || (sleep 10 && curl -f http://localhost:8091/health) || (sleep 30 && curl -f http://localhost:8091/health) || exit 1"]
+      interval: 60s
       timeout: 10s
-      retries: 5
+      retries: 10
+      start_period: 300s
 
   # AGiXT Backend API
   agixt:
@@ -516,25 +517,69 @@ services:
         return False
 
 def install_dependencies_and_start(install_path: str) -> bool:
-    """Install dependencies and start all services"""
+    """Install dependencies and start all services with better progress tracking"""
     try:
         os.chdir(install_path)
         
         log("Starting AGiXT v1.1-proxy services...")
+        log("⚠️  This will download CodeQwen2.5-7B model (~4GB) - may take 10-15 minutes", "INFO")
+        
         result = subprocess.run(
             ["docker", "compose", "up", "-d"],
             capture_output=True,
             text=True,
-            timeout=600  # 10 minutes for model download
+            timeout=900  # 15 minutes for model download
         )
         
         if result.returncode == 0:
-            log("Services started successfully", "SUCCESS")
-            log(f"Output: {result.stdout}")
+            log("Docker Compose started successfully", "SUCCESS")
+            if result.stdout:
+                log(f"Output: {result.stdout}")
             
-            # Wait for EzLocalAI to download model
-            log("Waiting for EzLocalAI model download (this may take several minutes)...")
-            time.sleep(120)  # 2 minutes initial wait
+            log("Waiting for EzLocalAI model download...")
+            log("You can monitor progress with: docker logs ezlocalai -f", "INFO")
+            
+            # Monitor EzLocalAI startup with better feedback
+            max_wait_time = 900  # 15 minutes
+            wait_interval = 30   # Check every 30 seconds
+            elapsed_time = 0
+            
+            while elapsed_time < max_wait_time:
+                log(f"Checking EzLocalAI status... ({elapsed_time//60}m {elapsed_time%60}s elapsed)")
+                
+                # Check container status
+                status_result = subprocess.run(
+                    ["docker", "inspect", "ezlocalai", "--format", "{{.State.Health.Status}}"],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if status_result.returncode == 0:
+                    health_status = status_result.stdout.strip()
+                    log(f"EzLocalAI health status: {health_status}")
+                    
+                    if health_status == "healthy":
+                        log("EzLocalAI is ready!", "SUCCESS")
+                        break
+                    elif health_status == "unhealthy":
+                        # Check logs for specific error
+                        log("EzLocalAI health check failed, checking logs...")
+                        logs_result = subprocess.run(
+                            ["docker", "logs", "ezlocalai", "--tail", "10"],
+                            capture_output=True,
+                            text=True
+                        )
+                        if "downloading" in logs_result.stdout.lower() or "loading" in logs_result.stdout.lower():
+                            log("Model still downloading/loading, continuing to wait...")
+                        else:
+                            log(f"EzLocalAI logs:\n{logs_result.stdout}", "WARN")
+                
+                time.sleep(wait_interval)
+                elapsed_time += wait_interval
+            
+            if elapsed_time >= max_wait_time:
+                log("EzLocalAI startup timeout, but continuing installation...", "WARN")
+                log("You can check status later with: docker logs ezlocalai -f", "INFO")
             
             # Install GraphQL dependencies in AGiXT container
             log("Installing GraphQL dependencies...")
@@ -542,22 +587,33 @@ def install_dependencies_and_start(install_path: str) -> bool:
             
             # Restart AGiXT to load GraphQL
             log("Restarting AGiXT with GraphQL support...")
-            subprocess.run(
+            restart_result = subprocess.run(
                 ["docker", "compose", "restart", "agixt"],
                 capture_output=True,
                 text=True,
                 timeout=120
             )
             
-            time.sleep(30)  # Wait for restart
+            if restart_result.returncode == 0:
+                log("AGiXT service restarted successfully", "SUCCESS")
+            else:
+                log(f"Warning: Could not restart AGiXT service: {restart_result.stderr}", "WARN")
+            
+            # Final wait for services
+            log("Waiting for all services to be ready...")
+            time.sleep(30)
             
             return True
         else:
-            log(f"Failed to start services: {result.stderr}", "ERROR")
+            log(f"Failed to start services:", "ERROR")
+            log(f"Error output: {result.stderr}", "ERROR")
+            if result.stdout:
+                log(f"Standard output: {result.stdout}")
             return False
         
     except subprocess.TimeoutExpired:
-        log("Timeout starting services (model download may still be in progress)", "WARN")
+        log("Service startup timeout (15 minutes) - model download may still be in progress", "WARN")
+        log("Check status with: docker compose ps && docker logs ezlocalai -f", "INFO")
         return True  # Continue as download might still be happening
     except Exception as e:
         log(f"Error starting services: {e}", "ERROR")
