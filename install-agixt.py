@@ -295,7 +295,7 @@ def get_env_config() -> Dict[str, str]:
         'EZLOCALAI_VOICE': 'DukeNukem',
         
         # EzLocalAI Server Configuration
-        'DEFAULT_MODEL': 'Qwen/Qwen2.5-Coder-7B-Instruct-GGUF',
+        'DEFAULT_MODEL': 'bartowski/Qwen2.5-Coder-7B-Instruct-GGUF',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
