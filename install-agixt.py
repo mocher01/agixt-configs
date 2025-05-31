@@ -377,8 +377,7 @@ def update_docker_compose(install_path: str) -> bool:
         log(f"Backup created: {backup_file}")
         
         # Create the enhanced docker-compose.yml
-        enhanced_compose = """version: '3.8'
-
+        enhanced_compose = """
 networks:
   agixt-network:
     external: true
@@ -406,12 +405,6 @@ services:
       - ./ezlocalai/voices:/app/voices
     networks:
       - agixt-network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8091/health || exit 1"]
-      interval: 60s
-      timeout: 10s
-      retries: 10
-      start_period: 600s  # Wait 10 minutes before starting health checks
 
   # AGiXT Backend API
   agixt:
