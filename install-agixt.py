@@ -12,11 +12,19 @@ Complete AGiXT installation with:
 ✅ Professional production setup
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - [CONFIG_NAME] [GITHUB_TOKEN]
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
 
 Examples:
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - --no-cleanup proxy
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy github_pat_xxx
+
+Options:
+  --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
+  
+Arguments:
+  CONFIG_NAME     Configuration name (default: proxy)
+  GITHUB_TOKEN    GitHub token for private repos (optional)
 
 Features v1.1-proxy:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
@@ -128,26 +136,55 @@ def cleanup_previous_installations():
     
     if not os.path.exists(base_path):
         os.makedirs(base_path, exist_ok=True)
-        return
+        log("Created /var/apps directory", "SUCCESS")
+        return True
     
     log("Cleaning up previous installations...")
+    
+    cleanup_count = 0
     for item in os.listdir(base_path):
         if item.startswith("agixt-") or item.startswith("AGIXT_"):
             item_path = os.path.join(base_path, item)
             if os.path.isdir(item_path):
                 log(f"Cleaning up {item_path}")
+                cleanup_count += 1
                 
-                # Stop docker services if they exist
-                compose_file = os.path.join(item_path, "docker-compose.yml")
-                if os.path.exists(compose_file):
-                    subprocess.run(
-                        ["docker", "compose", "-f", compose_file, "down"], 
-                        cwd=item_path,
-                        capture_output=True
-                    )
-                
-                # Remove directory
-                shutil.rmtree(item_path, ignore_errors=True)
+                try:
+                    # Stop docker services if they exist
+                    compose_file = os.path.join(item_path, "docker-compose.yml")
+                    if os.path.exists(compose_file):
+                        log(f"Stopping Docker services in {item}")
+                        result = subprocess.run(
+                            ["docker", "compose", "-f", compose_file, "down"], 
+                            cwd=item_path,
+                            capture_output=True,
+                            text=True,
+                            timeout=60
+                        )
+                        if result.returncode == 0:
+                            log(f"Docker services stopped successfully", "SUCCESS")
+                        else:
+                            log(f"Warning: Could not stop services: {result.stderr}", "WARN")
+                    
+                    # Remove directory
+                    log(f"Removing directory {item_path}")
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    
+                    if not os.path.exists(item_path):
+                        log(f"Directory {item} removed successfully", "SUCCESS")
+                    else:
+                        log(f"Warning: Directory {item} still exists", "WARN")
+                        
+                except Exception as e:
+                    log(f"Warning: Could not fully clean {item}: {e}", "WARN")
+                    # Continue with other installations - don't fail
+    
+    if cleanup_count == 0:
+        log("No previous AGiXT installations found")
+    else:
+        log(f"Cleanup completed - processed {cleanup_count} installations", "SUCCESS")
+    
+    return True  # Always return True - cleanup should never stop installation
 
 def create_installation_directory(config_name: str = "proxy") -> Optional[str]:
     """Create the installation directory with clean naming"""
@@ -616,18 +653,31 @@ def main():
     print("║      Nginx Proxy + EzLocalAI + CodeQwen2.5 + GraphQL        ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     
-    config_name = sys.argv[1] if len(sys.argv) > 1 else "proxy"
-    github_token = sys.argv[2] if len(sys.argv) > 2 else None
+    # Parse command line arguments
+    config_name = "proxy"
+    github_token = None
+    skip_cleanup = False
+    
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv[1:], 1):
+            if arg == "--no-cleanup" or arg == "--skip-cleanup":
+                skip_cleanup = True
+                log("Cleanup disabled via command line flag", "INFO")
+            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
+                github_token = arg
+            elif not arg.startswith("-"):
+                config_name = arg
     
     log(f"Configuration: {config_name}")
     log(f"Version: {VERSION}")
     log(f"Target folder: /var/apps/{INSTALL_FOLDER_NAME}")
+    log(f"Cleanup previous installations: {'No' if skip_cleanup else 'Yes'}")
     
     # Installation steps
     steps = [
         ("Checking prerequisites", check_prerequisites),
         ("Checking Docker network", check_docker_network),
-        ("Cleaning previous installations", cleanup_previous_installations),
+        ("Cleaning previous installations", lambda: cleanup_previous_installations() if not skip_cleanup else True),
         ("Creating installation directory", lambda: create_installation_directory(config_name)),
         ("Cloning AGiXT repository", None),  # Special handling
         ("Creating configuration", None),     # Special handling
@@ -639,6 +689,11 @@ def main():
     install_path = None
     
     for i, (step_name, step_func) in enumerate(steps, 1):
+        # Skip cleanup step if disabled
+        if step_name == "Cleaning previous installations" and skip_cleanup:
+            log(f"Step {i}/{len(steps)}: {step_name}... SKIPPED")
+            continue
+            
         log(f"Step {i}/{len(steps)}: {step_name}...")
         
         if step_func:
