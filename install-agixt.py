@@ -407,11 +407,11 @@ services:
     networks:
       - agixt-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8091/health || (sleep 10 && curl -f http://localhost:8091/health) || (sleep 30 && curl -f http://localhost:8091/health) || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8091/health || exit 1"]
       interval: 60s
       timeout: 10s
       retries: 10
-      start_period: 300s
+      start_period: 600s  # Wait 10 minutes before starting health checks
 
   # AGiXT Backend API
   agixt:
@@ -419,8 +419,7 @@ services:
     container_name: agixt
     restart: unless-stopped
     depends_on:
-      ezlocalai:
-        condition: service_healthy
+      - ezlocalai
     environment:
       # Pass ALL environment variables from .env
       - AGIXT_VERSION=${AGIXT_VERSION}
