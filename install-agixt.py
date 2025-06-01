@@ -1,37 +1,23 @@
-def copy_model_files(install_path: str) -> bool:
-    """Copy model files from backup location to AGiXT with HuggingFace structure"""
-    backup_model_path = "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-    
-    # Create HuggingFace-style folder structure
-    hf_model_name = "Qwen2.5-Coder-7B-Instruct-GGUF"
-    target_model_dir = os.path.join(install_path, "ezlocalai", hf_model_name)
-    target_model_path = os.path.join(target_model_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
-    
-    try:
-        log("Copying model files with HuggingFace structure...")
-        
-        # Check if backup model exists
-        if not os.path.exists(backup_model_path):
-            log(f"Backup model not found at {backup_model_path}",#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.1-proxy-fixed
-=============================================
+AGiXT Automated Installer - v1.2-ezlocolai
+===========================================
 
 Complete AGiXT installation with:
 ✅ Nginx reverse proxy integration (agixt.locod-ai.com / agixtui.locod-ai.com)
-✅ EzLocalAI integration (manual model selection)
-✅ Clean folder naming (/var/apps/agixt-v1.1-proxy)
+✅ EzLocalAI integration with HuggingFace model structure
+✅ Clean folder naming (/var/apps/agixt-v1.2-ezlocolai)
 ✅ Docker network integration
 ✅ GraphQL management interface
 ✅ Professional production setup
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
 
 Examples:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - --no-cleanup proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy github_pat_xxx
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - --no-cleanup proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy github_pat_xxx
 
 Options:
   --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
@@ -40,10 +26,10 @@ Arguments:
   CONFIG_NAME     Configuration name (default: proxy)
   GITHUB_TOKEN    GitHub token for private repos (optional)
 
-Features v1.1-proxy-fixed:
+Features v1.2-ezlocolai:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
-- 🤖 EzLocalAI: Ready for manual model selection
-- 📁 Clean naming: /var/apps/agixt-v1.1-proxy
+- 🤖 EzLocalAI: HuggingFace structure for Qwen2.5-Coder model
+- 📁 Clean naming: /var/apps/agixt-v1.2-ezlocolai
 - 🔗 Docker networks: agixt-network integration
 - 🔑 Secure API key generation
 - 🎯 Optimized for: n8n workflows, server scripts, automation
@@ -55,9 +41,9 @@ import subprocess
 import time
 import shutil
 import secrets
+import json
 from datetime import datetime
 from typing import Dict, Optional
-import json
 
 # Version info
 VERSION = "v1.2-ezlocolai"
@@ -247,7 +233,7 @@ def generate_secure_api_key() -> str:
     return secrets.token_urlsafe(32)
 
 def get_env_config() -> Dict[str, str]:
-    """Get the .env configuration for v1.1-proxy-fixed with EzLocalAI"""
+    """Get the .env configuration for v1.2-ezlocolai with EzLocalAI"""
     api_key = generate_secure_api_key()
     
     return {
@@ -307,7 +293,7 @@ def get_env_config() -> Dict[str, str]:
         'GRAPHIQL': 'true',
         'ENABLE_GRAPHQL': 'true',
         
-        # EzLocalAI Integration - MODEL CONFIGURATION
+        # EzLocalAI Integration - HuggingFace Model
         'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
         'EZLOCALAI_API_KEY': 'agixt-automation-key',
         'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
@@ -316,7 +302,7 @@ def get_env_config() -> Dict[str, str]:
         'EZLOCALAI_TOP_P': '0.9',
         'EZLOCALAI_VOICE': 'DukeNukem',
         
-        # EzLocalAI Server Configuration - WITH HUGGINGFACE MODEL
+        # EzLocalAI Server Configuration - HuggingFace Model
         'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
@@ -421,63 +407,6 @@ def copy_model_files(install_path: str) -> bool:
         # Check if backup model exists
         if not os.path.exists(backup_model_path):
             log(f"Backup model not found at {backup_model_path}", "ERROR")
-            return False
-        
-        # Get model size
-        model_size = os.path.getsize(backup_model_path) / (1024 * 1024 * 1024)  # GB
-        log(f"Found backup model: {model_size:.1f}GB", "INFO")
-        
-        # Create HuggingFace-style directory structure
-        os.makedirs(target_model_dir, exist_ok=True)
-        log(f"Created HuggingFace model directory: {target_model_dir}", "SUCCESS")
-        
-        # Copy model file
-        log("Copying model file... (this may take a moment)")
-        shutil.copy2(backup_model_path, target_model_path)
-        
-        # Create minimal HuggingFace config files
-        log("Creating HuggingFace config files...")
-        
-        # Create config.json
-        config_json = {
-            "architectures": ["Qwen2ForCausalLM"],
-            "model_type": "qwen2",
-            "quantization_config": {
-                "quant_method": "gguf",
-                "bits": 4
-            },
-            "torch_dtype": "float16"
-        }
-        
-        with open(os.path.join(target_model_dir, "config.json"), 'w') as f:
-            json.dump(config_json, f, indent=2)
-        
-        # Create tokenizer_config.json
-        tokenizer_config = {
-            "model_max_length": 16384,
-            "tokenizer_class": "Qwen2Tokenizer"
-        }
-        
-        with open(os.path.join(target_model_dir, "tokenizer_config.json"), 'w') as f:
-            json.dump(tokenizer_config, f, indent=2)
-        
-        # Verify copy and that it's a file, not directory
-        if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
-            target_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)  # GB
-            log(f"Model copied successfully: {target_size:.1f}GB", "SUCCESS")
-            
-            # Set proper permissions
-            os.chmod(target_model_path, 0o644)
-            log("Model permissions set", "SUCCESS")
-            log("HuggingFace config files created", "SUCCESS")
-            return True
-        else:
-            log("Model copy failed or created directory instead of file", "ERROR")
-            return False
-            
-    except Exception as e:
-        log(f"Error copying model files: {e}", "ERROR")
-        return False "ERROR")
             return False
         
         # Get model size
@@ -831,6 +760,20 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         else:
             log(f"❌ Model file missing: {model_file}", "ERROR")
             return False
+        
+        # Check HuggingFace config files
+        config_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "config.json")
+        tokenizer_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "tokenizer_config.json")
+        
+        if os.path.exists(config_file):
+            log("✅ HuggingFace config.json exists", "SUCCESS")
+        else:
+            log("❌ HuggingFace config.json missing", "ERROR")
+        
+        if os.path.exists(tokenizer_file):
+            log("✅ HuggingFace tokenizer_config.json exists", "SUCCESS")
+        else:
+            log("❌ HuggingFace tokenizer_config.json missing", "ERROR")
         
         # Check .env file variables
         env_file = os.path.join(install_path, ".env")
