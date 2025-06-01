@@ -661,4 +661,135 @@ def verify_installation(install_path: str):
                 if e.code == 405:
                     log("GraphQL endpoint is accessible (GET method not allowed - normal)", "SUCCESS")
                 else:
-                    log
+                    log(f"GraphQL endpoint returned HTTP {e.code}", "WARN")
+        except Exception as e:
+            log(f"GraphQL endpoint test failed: {e}", "WARN")
+            
+    except Exception as e:
+        log(f"Could not verify installation: {e}", "WARN")
+
+def main():
+    """Main installation function"""
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print(f"║                 AGiXT Installer {VERSION}                  ║")
+    print("║       Nginx Proxy + External AI Providers + GraphQL         ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    
+    # Parse command line arguments
+    config_name = "proxy"
+    github_token = None
+    skip_cleanup = False
+    
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv[1:], 1):
+            if arg == "--no-cleanup" or arg == "--skip-cleanup":
+                skip_cleanup = True
+                log("Cleanup disabled via command line flag", "INFO")
+            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
+                github_token = arg
+            elif not arg.startswith("-"):
+                config_name = arg
+    
+    log(f"Configuration: {config_name}")
+    log(f"Version: {VERSION}")
+    log(f"Target folder: /var/apps/{INSTALL_FOLDER_NAME}")
+    log(f"Cleanup previous installations: {'No' if skip_cleanup else 'Yes'}")
+    
+    # Installation steps
+    steps = [
+        ("Checking prerequisites", check_prerequisites),
+        ("Checking Docker network", check_docker_network),
+        ("Cleaning previous installations", lambda: cleanup_previous_installations() if not skip_cleanup else True),
+        ("Creating installation directory", lambda: create_installation_directory(config_name)),
+        ("Cloning AGiXT repository", None),  # Special handling
+        ("Creating configuration", None),     # Special handling
+        ("Updating Docker Compose", None),    # Special handling
+        ("Starting services", None),          # Special handling
+        ("Verifying installation", None)      # Special handling
+    ]
+    
+    install_path = None
+    
+    for i, (step_name, step_func) in enumerate(steps, 1):
+        # Skip cleanup step if disabled
+        if step_name == "Cleaning previous installations" and skip_cleanup:
+            log(f"Step {i}/{len(steps)}: {step_name}... SKIPPED")
+            continue
+            
+        log(f"Step {i}/{len(steps)}: {step_name}...")
+        
+        if step_func:
+            if step_name == "Creating installation directory":
+                install_path = step_func()
+                if not install_path:
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            else:
+                if not step_func():
+                    log(f"Step failed: {step_name}", "ERROR")
+                    sys.exit(1)
+        else:
+            # Handle special steps
+            if step_name == "Cloning AGiXT repository":
+                if not clone_agixt_repository(install_path, github_token):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Creating configuration":
+                config = get_env_config()
+                if not create_env_file(install_path, config):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Updating Docker Compose":
+                if not update_docker_compose(install_path):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Starting services":
+                if not install_dependencies_and_start(install_path):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Verifying installation":
+                verify_installation(install_path)
+    
+    # Success message
+    log("Installation completed successfully!", "SUCCESS")
+    print("\n" + "="*70)
+    print("🎉 AGiXT v1.1-proxy-no-local Installation Complete!")
+    print("="*70)
+    print(f"📁 Directory: {install_path}")
+    print(f"🌐 Frontend (via proxy): https://agixtui.locod-ai.com")
+    print(f"🔧 Backend API (via proxy): https://agixt.locod-ai.com")
+    print(f"🧬 GraphQL: https://agixt.locod-ai.com/graphql")
+    print()
+    print("🔗 Direct Access (for testing):")
+    print(f"   Frontend: http://162.55.213.90:3437")
+    print(f"   Backend: http://162.55.213.90:7437")
+    print()
+    print("📋 Management Commands:")
+    print(f"   Status: cd {install_path} && docker compose ps")
+    print(f"   Logs: cd {install_path} && docker compose logs -f")
+    print(f"   Stop: cd {install_path} && docker compose down")
+    print(f"   Restart: cd {install_path} && docker compose restart")
+    print()
+    print("🎯 Features:")
+    print("   ✅ Secure API key generation (JWT authentication)")
+    print("   ✅ No local AI dependencies")
+    print("   ✅ External provider ready (OpenAI, Anthropic, etc.)")
+    print("   ✅ Nginx reverse proxy ready")
+    print("   ✅ GraphQL management interface")
+    print()
+    print("📝 Next Steps:")
+    print("   1. Access AGiXT UI: http://162.55.213.90:3437")
+    print("   2. Add external AI provider (OpenAI, Anthropic, etc.)")
+    print("   3. Create agents using your selected providers")
+    print("   4. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
+    print("   5. Test agent functionality")
+    print()
+    print("🔑 Important:")
+    print("   - API Key has been auto-generated for security")
+    print("   - Check .env file for the generated API key")
+    print("   - No local AI configured - add external providers via UI")
+    print("="*70)
+
+
+if __name__ == "__main__":
+    main()
