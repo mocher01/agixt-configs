@@ -1205,12 +1205,6 @@ def main():
     print("║         🔑 HuggingFace Token (.env file or export)          ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     
-    # Check HuggingFace token first
-    hf_token = check_huggingface_token(github_token)
-    if not hf_token:
-        log("Installation cannot proceed without HuggingFace token", "ERROR")
-        sys.exit(1)
-    
     # Parse command line arguments
     config_name = "proxy"
     github_token = None
@@ -1225,6 +1219,12 @@ def main():
                 github_token = arg
             elif not arg.startswith("-"):
                 config_name = arg
+    
+    # Check HuggingFace token first
+    hf_token = check_huggingface_token(github_token)
+    if not hf_token:
+        log("Installation cannot proceed without HuggingFace token", "ERROR")
+        sys.exit(1)
     
     log(f"Configuration: {config_name}")
     log(f"Version: {VERSION}")
