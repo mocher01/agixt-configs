@@ -47,6 +47,18 @@ import shutil
 import secrets
 import json
 import urllib.request
+import os
+from urllib.request import Request, urlopen
+
+def download_with_auth(url, target_path):
+    token = os.getenv("HUGGINGFACE_TOKEN")
+    if not token:
+        raise Exception("Missing HUGGINGFACE_TOKEN in environment variables.")
+    req = Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urlopen(req) as response, open(target_path, 'wb') as out_file:
+        out_file.write(response.read())
+
 import urllib.error
 from datetime import datetime
 from typing import Dict, Optional
@@ -995,6 +1007,18 @@ def verify_installation(install_path: str):
         # Test endpoints
         import socket
         import urllib.request
+import os
+from urllib.request import Request, urlopen
+
+def download_with_auth(url, target_path):
+    token = os.getenv("HUGGINGFACE_TOKEN")
+    if not token:
+        raise Exception("Missing HUGGINGFACE_TOKEN in environment variables.")
+    req = Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urlopen(req) as response, open(target_path, 'wb') as out_file:
+        out_file.write(response.read())
+
         import urllib.error
         
         endpoints = {
