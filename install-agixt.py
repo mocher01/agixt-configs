@@ -40,6 +40,8 @@ Features v1.3-ezlocolai-deepseek:
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv('.env')
 import sys
 import subprocess
 import time
@@ -48,6 +50,8 @@ import secrets
 import json
 import urllib.request
 import os
+from dotenv import load_dotenv
+load_dotenv('.env')
 from urllib.request import Request, urlopen
 
 def download_with_auth(url, target_path):
@@ -1008,6 +1012,8 @@ def verify_installation(install_path: str):
         import socket
         import urllib.request
 import os
+from dotenv import load_dotenv
+load_dotenv('.env')
 from urllib.request import Request, urlopen
 
 def download_with_auth(url, target_path):
