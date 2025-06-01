@@ -11,7 +11,7 @@ echo "🎯 EzLocalAI Model Fix - Targeted Update"
 echo "========================================"
 
 # Configuration
-INSTALL_DIR="/var/apps/agixt-v1.1-proxy-fixed"
+INSTALL_DIR="/var/apps/agixt-v1.2 - ezlocolai model"
 BACKUP_MODEL="/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
 TARGET_MODEL_DIR="$INSTALL_DIR/ezlocalai/Qwen2.5-Coder-7B-Instruct"
 TARGET_MODEL_FILE="$TARGET_MODEL_DIR/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
