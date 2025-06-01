@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.1-proxy
-======================================
+AGiXT Automated Installer - v1.1-proxy-fixed
+=============================================
 
 Complete AGiXT installation with:
 ✅ Nginx reverse proxy integration (agixt.locod-ai.com / agixtui.locod-ai.com)
-✅ EzLocalAI integration with CodeQwen2.5-7B for automation/scripting
+✅ EzLocalAI integration (manual model selection)
 ✅ Clean folder naming (/var/apps/agixt-v1.1-proxy)
 ✅ Docker network integration
 ✅ GraphQL management interface
 ✅ Professional production setup
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
 
 Examples:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - --no-cleanup proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy github_pat_xxx
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - --no-cleanup proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy github_pat_xxx
 
 Options:
   --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
@@ -26,11 +26,12 @@ Arguments:
   CONFIG_NAME     Configuration name (default: proxy)
   GITHUB_TOKEN    GitHub token for private repos (optional)
 
-Features v1.1-proxy:
+Features v1.1-proxy-fixed:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
-- 🤖 EzLocalAI: CodeQwen2.5-7B for code generation & automation
+- 🤖 EzLocalAI: Ready for manual model selection
 - 📁 Clean naming: /var/apps/agixt-v1.1-proxy
 - 🔗 Docker networks: agixt-network integration
+- 🔑 Secure API key generation
 - 🎯 Optimized for: n8n workflows, server scripts, automation
 """
 
@@ -39,12 +40,13 @@ import sys
 import subprocess
 import time
 import shutil
+import secrets
 from datetime import datetime
 from typing import Dict, Optional
 import json
 
 # Version info
-VERSION = "v1.1-proxy"
+VERSION = "v1.1-proxy-fixed"
 INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
 
 def log(message: str, level: str = "INFO"):
@@ -226,8 +228,14 @@ def clone_agixt_repository(install_path: str, github_token: Optional[str] = None
         log(f"Error cloning repository: {e}", "ERROR")
         return False
 
+def generate_secure_api_key() -> str:
+    """Generate a secure API key for AGiXT"""
+    return secrets.token_urlsafe(32)
+
 def get_env_config() -> Dict[str, str]:
-    """Get the .env configuration for v1.1-proxy with EzLocalAI"""
+    """Get the .env configuration for v1.1-proxy-fixed with EzLocalAI"""
+    api_key = generate_secure_api_key()
+    
     return {
         # Version info
         'AGIXT_VERSION': VERSION,
@@ -235,8 +243,8 @@ def get_env_config() -> Dict[str, str]:
         
         # Basic configuration - PROXY READY
         'AGIXT_AUTO_UPDATE': 'true',
-        'AGIXT_API_KEY': '',
-        'UVICORN_WORKERS': '6',  # Reduced for EzLocalAI
+        'AGIXT_API_KEY': api_key,  # FIXED: Generate secure API key
+        'UVICORN_WORKERS': '6',
         'WORKING_DIRECTORY': './WORKSPACE',
         'TZ': 'Europe/Paris',
         
@@ -247,8 +255,8 @@ def get_env_config() -> Dict[str, str]:
         'AUTH_WEB': 'https://agixtui.locod-ai.com/user',
         
         # Interface management - Complete setup
-        'APP_NAME': 'AGiXT Production Server v1.1-proxy',
-        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Code Automation',
+        'APP_NAME': 'AGiXT Production Server v1.1-proxy-fixed',
+        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Manual Model Selection',
         'AGIXT_AGENT': 'CodeAssistant',
         'AGIXT_SHOW_SELECTION': 'agent,conversation',
         'AGIXT_SHOW_AGENT_BAR': 'true',
@@ -256,7 +264,7 @@ def get_env_config() -> Dict[str, str]:
         'AGIXT_CONVERSATION_MODE': 'select',
         'INTERACTIVE_MODE': 'chat',
         'THEME_NAME': 'doom',
-        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy - Code Automation & n8n Workflows',
+        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy-fixed - Manual Model Selection',
         
         # Authentication & agents
         'AUTH_PROVIDER': 'magicalauth',
@@ -279,23 +287,21 @@ def get_env_config() -> Dict[str, str]:
         'LOG_FORMAT': '%(asctime)s | %(levelname)s | %(message)s',
         'ALLOWED_DOMAINS': '*',
         'AGIXT_BRANCH': 'stable',
-        'AGIXT_REQUIRE_API_KEY': 'false',
+        'AGIXT_REQUIRE_API_KEY': 'false',  # Keep disabled for easier setup
         
         # GraphQL Support
         'GRAPHIQL': 'true',
         'ENABLE_GRAPHQL': 'true',
         
-        # EzLocalAI Integration - OPTIMIZED FOR CODE
+        # EzLocalAI Integration - MANUAL MODEL SELECTION
         'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
         'EZLOCALAI_API_KEY': 'agixt-automation-key',
-        'EZLOCALAI_MODEL': 'CodeQwen2.5-7B-Instruct',
         'EZLOCALAI_MAX_TOKENS': '16384',
         'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
         'EZLOCALAI_TOP_P': '0.9',
         'EZLOCALAI_VOICE': 'DukeNukem',
         
-        # EzLocalAI Server Configuration
-        'DEFAULT_MODEL': 'bartowski/Qwen2.5-Coder-7B-Instruct-GGUF',
+        # EzLocalAI Server Configuration - NO DEFAULT MODEL
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -318,7 +324,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write(f"# AGiXT Server Configuration - {VERSION}\n")
             f.write("# =============================================================================\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write("# Features: Nginx Proxy + EzLocalAI + CodeQwen2.5 + GraphQL\n")
+            f.write("# Features: Nginx Proxy + EzLocalAI + Manual Model Selection + GraphQL\n")
             f.write("# Domains: https://agixt.locod-ai.com + https://agixtui.locod-ai.com\n")
             f.write("# Optimization: Code generation, n8n workflows, server automation\n")
             f.write("# =============================================================================\n\n")
@@ -332,8 +338,8 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                 "FEATURES": ["AGIXT_FILE_UPLOAD_ENABLED", "AGIXT_VOICE_INPUT_ENABLED", "AGIXT_RLHF", "AGIXT_ALLOW_MESSAGE_EDITING", "AGIXT_ALLOW_MESSAGE_DELETION", "AGIXT_SHOW_OVERRIDE_SWITCHES"],
                 "SYSTEM": ["DATABASE_TYPE", "DATABASE_NAME", "LOG_LEVEL", "LOG_FORMAT", "ALLOWED_DOMAINS", "AGIXT_BRANCH", "AGIXT_REQUIRE_API_KEY"],
                 "GRAPHQL": ["GRAPHIQL", "ENABLE_GRAPHQL"],
-                "EZLOCALAI INTEGRATION": ["EZLOCALAI_API_URL", "EZLOCALAI_API_KEY", "EZLOCALAI_MODEL", "EZLOCALAI_MAX_TOKENS", "EZLOCALAI_TEMPERATURE", "EZLOCALAI_TOP_P", "EZLOCALAI_VOICE"],
-                "EZLOCALAI SERVER": ["DEFAULT_MODEL", "LLM_MAX_TOKENS", "THREADS", "GPU_LAYERS", "WHISPER_MODEL", "IMG_ENABLED", "AUTO_UPDATE"],
+                "EZLOCALAI INTEGRATION": ["EZLOCALAI_API_URL", "EZLOCALAI_API_KEY", "EZLOCALAI_MAX_TOKENS", "EZLOCALAI_TEMPERATURE", "EZLOCALAI_TOP_P", "EZLOCALAI_VOICE"],
+                "EZLOCALAI SERVER": ["LLM_MAX_TOKENS", "THREADS", "GPU_LAYERS", "WHISPER_MODEL", "IMG_ENABLED", "AUTO_UPDATE"],
                 "EXTERNAL SERVICES": ["TEXTGEN_URI", "N8N_URI"]
             }
             
@@ -345,10 +351,38 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                 f.write("\n")
             
             f.write("# =============================================================================\n")
-            f.write("# END CONFIGURATION\n")
+            f.write("# CONFIGURATION NOTES v1.1-proxy-fixed\n")
+            f.write("# =============================================================================\n")
+            f.write("# 🔑 SECURITY:\n")
+            f.write("#    - Auto-generated secure API key for JWT authentication\n")
+            f.write("#    - API key requirement disabled for easier setup\n")
+            f.write("#\n")
+            f.write("# 🌐 PROXY SETUP:\n")
+            f.write("#    - Frontend: https://agixtui.locod-ai.com → http://agixtinteractive:3437\n")
+            f.write("#    - Backend: https://agixt.locod-ai.com → http://agixt:7437\n")
+            f.write("#    - EzLocalAI: Direct access at http://162.55.213.90:8091\n")
+            f.write("#\n")
+            f.write("# 🤖 EZLOCALAI - MANUAL MODEL SELECTION:\n")
+            f.write("#    - No default model (clean start)\n")
+            f.write("#    - Add models manually via EzLocalAI interface\n")
+            f.write("#    - Temperature: 0.3 (precise code generation)\n")
+            f.write("#    - Max Tokens: 16384 (long code blocks)\n")
+            f.write("#    - CPU Only: 3 threads (AMD EPYC optimized)\n")
+            f.write("#\n")
+            f.write("# 🔗 INTEGRATIONS:\n")
+            f.write("#    - n8n: Pre-configured for workflow automation\n")
+            f.write("#    - GraphQL: Full management interface\n")
+            f.write("#    - Docker Network: agixt-network for internal communication\n")
+            f.write("#\n")
+            f.write("# 🎯 NEXT STEPS:\n")
+            f.write("#    1. Access EzLocalAI at http://162.55.213.90:8091\n")
+            f.write("#    2. Add your preferred models manually\n")
+            f.write("#    3. Create agents using your selected models\n")
+            f.write("#    4. Configure nginx for proxy domains\n")
             f.write("# =============================================================================\n")
         
         log(f"Created .env file with {len(config)} variables", "SUCCESS")
+        log(f"Generated secure API key: {config['AGIXT_API_KEY'][:8]}...", "INFO")
         return True
         
     except Exception as e:
@@ -364,7 +398,7 @@ def update_docker_compose(install_path: str) -> bool:
         return False
     
     try:
-        log("Updating docker-compose.yml for v1.1-proxy...")
+        log("Updating docker-compose.yml for v1.1-proxy-fixed...")
         
         # Read original docker-compose.yml
         with open(compose_file, 'r') as f:
@@ -383,13 +417,12 @@ networks:
     external: true
 
 services:
-  # EzLocalAI - Code Generation & Automation
+  # EzLocalAI - Manual Model Selection
   ezlocalai:
     image: joshxt/ezlocalai:main
     container_name: ezlocalai
     restart: unless-stopped
     environment:
-      - DEFAULT_MODEL=${DEFAULT_MODEL}
       - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
       - THREADS=${THREADS}
       - GPU_LAYERS=${GPU_LAYERS}
@@ -439,7 +472,6 @@ services:
       # EzLocalAI Integration
       - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
       - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
-      - EZLOCALAI_MODEL=${EZLOCALAI_MODEL}
       - EZLOCALAI_MAX_TOKENS=${EZLOCALAI_MAX_TOKENS}
       - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
       - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
@@ -505,123 +537,21 @@ services:
         with open(compose_file, 'w') as f:
             f.write(enhanced_compose)
         
-        log("docker-compose.yml updated for v1.1-proxy with EzLocalAI", "SUCCESS")
+        log("docker-compose.yml updated for v1.1-proxy-fixed with manual EzLocalAI", "SUCCESS")
         return True
         
     except Exception as e:
         log(f"Failed to update docker-compose.yml: {e}", "ERROR")
         return False
 
-def monitor_ezlocalai_startup(install_path: str) -> bool:
-    """Monitor EzLocalAI startup with detailed real-time logging"""
-    log("🤖 Starting EzLocalAI monitoring...", "INFO")
-    log("This will show real-time progress of model download and startup", "INFO")
-    
-    max_wait_time = 1200  # 20 minutes
-    check_interval = 10   # Check every 10 seconds
-    elapsed_time = 0
-    
-    log(f"⏱️  Maximum wait time: {max_wait_time//60} minutes", "INFO")
-    log(f"📊 Check interval: {check_interval} seconds", "INFO")
-    
-    while elapsed_time < max_wait_time:
-        # Get container status
-        container_status = get_container_status("ezlocalai")
-        
-        # Get latest logs (last 5 lines)
-        latest_logs = get_container_logs("ezlocalai", lines=5)
-        
-        # Calculate progress
-        minutes_elapsed = elapsed_time // 60
-        seconds_elapsed = elapsed_time % 60
-        
-        log(f"⏰ [{minutes_elapsed:02d}:{seconds_elapsed:02d}] Container: {container_status}", "INFO")
-        
-        # Show latest log lines if they contain useful info
-        if latest_logs:
-            for line in latest_logs:
-                if any(keyword in line.lower() for keyword in ['downloading', 'loading', 'model', 'error', 'ready', 'started']):
-                    log(f"📜 EzLocalAI: {line.strip()}", "INFO")
-        
-        # Check if startup is successful
-        if container_status == "running":
-            # Try to hit the health endpoint
-            try:
-                import urllib.request
-                req = urllib.request.Request('http://localhost:8091/health', timeout=5)
-                response = urllib.request.urlopen(req)
-                if response.getcode() == 200:
-                    log("✅ EzLocalAI is ready and responding!", "SUCCESS")
-                    return True
-            except Exception:
-                pass  # Still starting up
-        
-        # Check for failure conditions
-        if container_status in ["exited", "dead"]:
-            log("❌ EzLocalAI container has stopped - checking exit reason...", "ERROR")
-            exit_logs = get_container_logs("ezlocalai", lines=20)
-            for line in exit_logs:
-                if any(keyword in line.lower() for keyword in ['error', 'exception', 'failed', 'traceback']):
-                    log(f"💥 Error: {line.strip()}", "ERROR")
-            return False
-        
-        # Show download progress if available
-        if latest_logs:
-            for line in latest_logs:
-                if 'downloading' in line.lower() and any(char.isdigit() for char in line):
-                    log(f"📥 Download progress: {line.strip()}", "INFO")
-        
-        time.sleep(check_interval)
-        elapsed_time += check_interval
-    
-    log(f"⏰ Timeout after {max_wait_time//60} minutes", "WARN")
-    log("EzLocalAI may still be downloading in the background", "INFO")
-    return False
-
-def get_container_status(container_name: str) -> str:
-    """Get the current status of a container"""
-    try:
-        result = subprocess.run(
-            ["docker", "inspect", container_name, "--format", "{{.State.Status}}"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-        return "not_found"
-    except Exception:
-        return "unknown"
-
-def get_container_logs(container_name: str, lines: int = 10) -> list:
-    """Get the latest logs from a container"""
-    try:
-        result = subprocess.run(
-            ["docker", "logs", container_name, "--tail", str(lines), "--timestamps"],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            return result.stdout.strip().split('\n') if result.stdout.strip() else []
-        return []
-    except Exception:
-        return []
 def install_dependencies_and_start(install_path: str) -> bool:
-    """Install dependencies and start all services with detailed monitoring"""
+    """Install dependencies and start all services"""
     try:
         os.chdir(install_path)
         
-        log("🚀 Starting AGiXT v1.1-proxy services...", "INFO")
+        log("🚀 Starting AGiXT v1.1-proxy-fixed services...", "INFO")
         log("📋 Configuration loaded from .env file", "INFO")
-        log("⚠️  EzLocalAI will download CodeQwen2.5-7B model (~4GB)", "INFO")
-        log("⏱️  This may take 10-20 minutes depending on internet speed", "INFO")
-        
-        # Show current configuration before starting
-        log("🔍 Verifying configuration...", "INFO")
-        env_check = verify_env_configuration(install_path)
-        if not env_check:
-            log("⚠️  Configuration issues detected, but continuing...", "WARN")
+        log("🤖 EzLocalAI will start without models (manual selection)", "INFO")
         
         log("🐳 Starting Docker Compose services...", "INFO")
         result = subprocess.run(
@@ -649,22 +579,9 @@ def install_dependencies_and_start(install_path: str) -> bool:
                 for line in status_result.stdout.strip().split('\n'):
                     log(f"   {line}", "INFO")
             
-            # Monitor EzLocalAI startup with detailed logging
-            log("🤖 Starting EzLocalAI monitoring and model download...", "INFO")
-            log("💡 You can also monitor with: docker logs ezlocalai -f", "INFO")
-            
-            ezlocalai_ready = monitor_ezlocalai_startup(install_path)
-            
-            if ezlocalai_ready:
-                log("✅ EzLocalAI startup completed successfully!", "SUCCESS")
-            else:
-                log("⚠️  EzLocalAI startup monitoring timed out", "WARN")
-                log("🔍 Checking if model is still downloading...", "INFO")
-                logs = get_container_logs("ezlocalai", lines=10)
-                for line in logs:
-                    if 'downloading' in line.lower():
-                        log("📥 Model download appears to be in progress", "INFO")
-                        break
+            # Wait for services to start
+            log("⏱️  Waiting for services to initialize...", "INFO")
+            time.sleep(30)
             
             # Install GraphQL dependencies
             log("🔧 Installing GraphQL dependencies...", "INFO")
@@ -721,43 +638,6 @@ def install_dependencies_and_start(install_path: str) -> bool:
         return False
     except Exception as e:
         log(f"💥 Unexpected error during service startup: {e}", "ERROR")
-        return False
-
-def verify_env_configuration(install_path: str) -> bool:
-    """Verify that key configuration values are present"""
-    try:
-        env_file = os.path.join(install_path, ".env")
-        if not os.path.exists(env_file):
-            log("❌ .env file not found", "ERROR")
-            return False
-        
-        with open(env_file, 'r') as f:
-            env_content = f.read()
-        
-        required_vars = ['DEFAULT_MODEL', 'AGIXT_SERVER', 'APP_URI']
-        missing_vars = []
-        
-        for var in required_vars:
-            if f"{var}=" not in env_content:
-                missing_vars.append(var)
-        
-        if missing_vars:
-            log(f"⚠️  Missing required variables: {', '.join(missing_vars)}", "WARN")
-            return False
-        
-        # Show key configuration values
-        for line in env_content.split('\n'):
-            if line.startswith('DEFAULT_MODEL='):
-                log(f"🤖 Model: {line.split('=', 1)[1]}", "INFO")
-            elif line.startswith('AGIXT_SERVER='):
-                log(f"🔗 Backend: {line.split('=', 1)[1]}", "INFO")
-            elif line.startswith('APP_URI='):
-                log(f"🌐 Frontend: {line.split('=', 1)[1]}", "INFO")
-        
-        return True
-        
-    except Exception as e:
-        log(f"⚠️  Could not verify configuration: {e}", "WARN")
         return False
 
 def install_graphql_dependencies(install_path: str) -> bool:
@@ -846,8 +726,8 @@ def verify_installation(install_path: str):
 def main():
     """Main installation function"""
     print("╔═══════════════════════════════════════════════════════════════╗")
-    print(f"║                    AGiXT Installer {VERSION}                    ║")
-    print("║      Nginx Proxy + EzLocalAI + CodeQwen2.5 + GraphQL        ║")
+    print(f"║                 AGiXT Installer {VERSION}                  ║")
+    print("║     Nginx Proxy + EzLocalAI + Manual Models + GraphQL       ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     
     # Parse command line arguments
@@ -928,7 +808,7 @@ def main():
     # Success message
     log("Installation completed successfully!", "SUCCESS")
     print("\n" + "="*70)
-    print("🎉 AGiXT v1.1-proxy Installation Complete!")
+    print("🎉 AGiXT v1.1-proxy-fixed Installation Complete!")
     print("="*70)
     print(f"📁 Directory: {install_path}")
     print(f"🌐 Frontend (via proxy): https://agixtui.locod-ai.com")
@@ -946,18 +826,24 @@ def main():
     print(f"   Stop: cd {install_path} && docker compose down")
     print(f"   Restart: cd {install_path} && docker compose restart")
     print()
-    print("🎯 Features Enabled:")
+    print("🎯 Features Fixed:")
+    print("   ✅ Secure API key generation (JWT authentication)")
+    print("   ✅ No forced model downloads")
+    print("   ✅ Manual model selection via EzLocalAI")
     print("   ✅ Nginx reverse proxy ready")
-    print("   ✅ EzLocalAI with CodeQwen2.5-7B")
     print("   ✅ GraphQL management interface")
-    print("   ✅ Code generation & automation")
-    print("   ✅ n8n workflow integration")
     print()
-    print("⚠️  Next Steps:")
-    print("   1. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
-    print("   2. Wait for CodeQwen2.5 model download (may take 10-15 minutes)")
-    print("   3. Test proxy URLs once nginx is configured")
-    print("   4. Create agents using EzLocalAI provider")
+    print("📝 Next Steps:")
+    print("   1. Access EzLocalAI: http://162.55.213.90:8091")
+    print("   2. Add your preferred models manually")
+    print("   3. Create agents using your selected models")
+    print("   4. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
+    print("   5. Test agent functionality with real models")
+    print()
+    print("🔑 Important:")
+    print("   - API Key has been auto-generated for security")
+    print("   - Check .env file for the generated API key")
+    print("   - Models must be added manually via EzLocalAI interface")
     print("="*70)
 
 
