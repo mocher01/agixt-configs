@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.2-ezlocolai-light
+AGiXT Automated Installer - v1.3-ezlocolai-deepseek
 ================================================
 
 Complete AGiXT installation with:
 ✅ Nginx reverse proxy integration (agixt.locod-ai.com / agixtui.locod-ai.com)
-✅ EzLocalAI integration with lightweight Qwen2.5-Coder-1.5B model (~1GB)
+✅ EzLocalAI integration with lightweight Deepseek Coder 1.3B model (~1GB)
 ✅ EzLocalAI web interface exposed (ports 8091 + 8502)
 ✅ Automatic model download if not in backup
-✅ Clean folder naming (/var/apps/agixt-v1.2-ezlocolai-light)
+✅ Clean folder naming (/var/apps/agixt-v1.3-ezlocolai-deepseek)
 ✅ Docker network integration
 ✅ GraphQL management interface
 ✅ Optimized for 16GB RAM servers
@@ -28,11 +28,11 @@ Arguments:
   CONFIG_NAME     Configuration name (default: proxy)
   GITHUB_TOKEN    GitHub token for private repos (optional)
 
-Features v1.2-ezlocolai-light:
+Features v1.3-ezlocolai-deepseek:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
-- 🤖 EzLocalAI: Lightweight Qwen2.5-Coder-1.5B model (~1GB RAM)
+- 🤖 EzLocalAI: Lightweight Deepseek Coder 1.3B model (~1GB RAM)
 - 🎮 EzLocalAI UI: Exposed on port 8502 for model management
-- 📁 Clean naming: /var/apps/agixt-v1.2-ezlocolai-light
+- 📁 Clean naming: /var/apps/agixt-v1.3-ezlocolai-deepseek
 - 🔄 Auto-download: Downloads model if not in backup
 - 🔗 Docker networks: agixt-network integration
 - 🔑 Secure API key generation
@@ -52,15 +52,15 @@ from datetime import datetime
 from typing import Dict, Optional
 
 # Version info
-VERSION = "v1.2-ezlocolai-light"
+VERSION = "v1.3-ezlocolai-deepseek"
 INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
 
 # Model configuration - LIGHTWEIGHT
 MODEL_CONFIG = {
-    "name": "Qwen2.5-Coder-1.5B-Instruct",
-    "file": "Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf",
-    "backup_path": "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-1.5B-Instruct/Qwen2.5-Coder-1.5B-Instruct-Q4_K_M.gguf",
-    "download_url": "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+    "name": "Deepseek Coder 1.3B-Instruct",
+    "file": "Deepseek Coder 1.3B-Instruct-Q4_K_M.gguf",
+    "backup_path": "/var/backups/ezlocalai-models-20250601/Deepseek Coder 1.3B-Instruct/Deepseek Coder 1.3B-Instruct-Q4_K_M.gguf",
+    "download_url": "https://huggingface.co/Qwen/Deepseek Coder 1.3B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
     "expected_size_gb": 1.0,
     "max_tokens": 32768,
     "hidden_size": 1536,
@@ -302,7 +302,7 @@ def copy_or_download_model_files(install_path: str) -> bool:
     backup_model_path = MODEL_CONFIG["backup_path"]
     
     try:
-        log("Setting up Qwen2.5-Coder-1.5B model (lightweight)...")
+        log("Setting up Deepseek Coder 1.3B model (lightweight)...")
         log(f"Model: {hf_model_name}")
         log(f"File: {MODEL_CONFIG['file']}")
         log(f"Expected size: ~{MODEL_CONFIG['expected_size_gb']}GB")
@@ -404,7 +404,7 @@ def copy_or_download_model_files(install_path: str) -> bool:
         return False
 
 def get_env_config() -> Dict[str, str]:
-    """Get the .env configuration for v1.2-ezlocolai-light with lightweight model"""
+    """Get the .env configuration for v1.3-ezlocolai-deepseek with lightweight model"""
     api_key = generate_secure_api_key()
     
     return {
@@ -499,7 +499,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
             f.write("# Features: Nginx Proxy + EzLocalAI + Qwen2.5-1.5B Model + GraphQL\n")
             f.write("# Domains: https://agixt.locod-ai.com + https://agixtui.locod-ai.com\n")
-            f.write("# Model: Lightweight Qwen2.5-Coder-1.5B (~1GB RAM)\n")
+            f.write("# Model: Lightweight Deepseek Coder 1.3B (~1GB RAM)\n")
             f.write("# Optimization: 16GB RAM servers, code generation, workflows\n")
             f.write("# =============================================================================\n\n")
             
@@ -577,7 +577,7 @@ def update_docker_compose(install_path: str) -> bool:
         return False
     
     try:
-        log("Updating docker-compose.yml for v1.2-ezlocolai-light...")
+        log("Updating docker-compose.yml for v1.3-ezlocolai-deepseek...")
         
         # Read original docker-compose.yml
         with open(compose_file, 'r') as f:
@@ -596,7 +596,7 @@ networks:
     external: true
 
 services:
-  # EzLocalAI - Qwen2.5-Coder-1.5B Model (Lightweight)
+  # EzLocalAI - Deepseek Coder 1.3B Model (Lightweight)
   ezlocalai:
     image: joshxt/ezlocalai:main
     container_name: ezlocalai
@@ -1158,7 +1158,7 @@ def main():
     print("📝 Next Steps:")
     print("   1. Access AGiXT Frontend: http://162.55.213.90:3437")
     print("   2. Access EzLocalAI UI: http://162.55.213.90:8502")
-    print("   3. Create agents using Qwen2.5-Coder-1.5B model")
+    print("   3. Create agents using Deepseek Coder 1.3B model")
     print("   4. Test chat functionality")
     print("   5. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
     print("   6. Monitor logs for any issues")
