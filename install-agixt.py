@@ -293,17 +293,17 @@ def get_env_config() -> Dict[str, str]:
         'GRAPHIQL': 'true',
         'ENABLE_GRAPHQL': 'true',
         
-        # EzLocalAI Integration - HuggingFace Model
+        # EzLocalAI Integration - HuggingFace Model (CORRECT NAME)
         'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
         'EZLOCALAI_API_KEY': 'agixt-automation-key',
-        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct',
         'EZLOCALAI_MAX_TOKENS': '16384',
         'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
         'EZLOCALAI_TOP_P': '0.9',
         'EZLOCALAI_VOICE': 'DukeNukem',
         
-        # EzLocalAI Server Configuration - HuggingFace Model
-        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+        # EzLocalAI Server Configuration - HuggingFace Model (CORRECT NAME)
+        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -396,8 +396,8 @@ def copy_model_files(install_path: str) -> bool:
     """Copy model files from backup location to AGiXT with HuggingFace structure"""
     backup_model_path = "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
     
-    # Create HuggingFace-style folder structure
-    hf_model_name = "Qwen2.5-Coder-7B-Instruct-GGUF"
+    # Create HuggingFace-style folder structure - CORRECT NAME WITHOUT -GGUF
+    hf_model_name = "Qwen2.5-Coder-7B-Instruct"
     target_model_dir = os.path.join(install_path, "ezlocalai", hf_model_name)
     target_model_path = os.path.join(target_model_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
     
@@ -753,7 +753,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         log("=" * 50, "INFO")
         
         # Check model file exists
-        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
         if os.path.exists(model_file):
             model_size = os.path.getsize(model_file) / (1024 * 1024 * 1024)  # GB
             log(f"✅ Model file exists: {model_size:.1f}GB", "SUCCESS")
@@ -762,8 +762,8 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             return False
         
         # Check HuggingFace config files
-        config_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "config.json")
-        tokenizer_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "tokenizer_config.json")
+        config_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct", "config.json")
+        tokenizer_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct", "tokenizer_config.json")
         
         if os.path.exists(config_file):
             log("✅ HuggingFace config.json exists", "SUCCESS")
@@ -784,8 +784,8 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             
             # Check critical variables
             required_vars = {
-                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
-                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct',
+                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct',
                 'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
                 'EZLOCALAI_API_KEY': 'agixt-automation-key',
                 'EZLOCALAI_MAX_TOKENS': '16384',
@@ -816,7 +816,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             if result.returncode == 0:
                 env_vars = result.stdout
                 ezlocalai_checks = {
-                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct',
                     'LLM_MAX_TOKENS': '16384',
                     'THREADS': '3',
                     'GPU_LAYERS': '0',
@@ -848,7 +848,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
                 env_vars = result.stdout
                 agixt_checks = {
                     'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
-                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct',
                     'EZLOCALAI_API_KEY': 'agixt-automation-key',
                     'EZLOCALAI_MAX_TOKENS': '16384',
                     'EZLOCALAI_TEMPERATURE': '0.3'
@@ -918,7 +918,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         log("=" * 50, "INFO")
         log("🎯 Model Integration Status:", "INFO")
         log(f"  📦 Model File: {model_file}", "INFO")
-        log("  🔧 Configuration: Qwen2.5-Coder-7B-Instruct-GGUF", "INFO")
+        log("  🔧 Configuration: Qwen2.5-Coder-7B-Instruct", "INFO")
         log("  📁 Installation: /var/apps/agixt-v1.2-ezlocolai", "INFO")
         log("", "INFO")
         log("✅ EzLocalAI validation completed", "SUCCESS")
