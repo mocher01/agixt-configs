@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.1-proxy-fixed
+AGiXT Automated Installer - v1.2 - ezlocolai fix
 =============================================
 
 Complete AGiXT installation with:
@@ -29,7 +29,7 @@ Arguments:
 Features v1.1-proxy-fixed:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
 - 🤖 EzLocalAI: Ready for manual model selection
-- 📁 Clean naming: /var/apps/agixt-v1.1-proxy
+- 📁 Clean naming: /var/apps/agixt-v1.2-ezlocolai
 - 🔗 Docker networks: agixt-network integration
 - 🔑 Secure API key generation
 - 🎯 Optimized for: n8n workflows, server scripts, automation
@@ -46,7 +46,7 @@ from typing import Dict, Optional
 import json
 
 # Version info
-VERSION = "v1.2-ezlocolai fix"
+VERSION = "v1.2-ezlocolai-fixed"
 INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
 
 def log(message: str, level: str = "INFO"):
@@ -296,14 +296,14 @@ def get_env_config() -> Dict[str, str]:
         # EzLocalAI Integration - MODEL CONFIGURATION
         'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
         'EZLOCALAI_API_KEY': 'agixt-automation-key',
-        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
         'EZLOCALAI_MAX_TOKENS': '16384',
         'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
         'EZLOCALAI_TOP_P': '0.9',
         'EZLOCALAI_VOICE': 'DukeNukem',
         
         # EzLocalAI Server Configuration - WITH MODEL
-        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -394,8 +394,8 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
 def copy_model_files(install_path: str) -> bool:
     """Copy model files from backup location to AGiXT"""
     backup_model_path = "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-    target_model_dir = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct")
-    target_model_path = os.path.join(target_model_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+    target_models_dir = os.path.join(install_path, "ezlocalai")
+    target_model_path = os.path.join(target_models_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
     
     try:
         log("Copying model files from backup location...")
@@ -409,16 +409,25 @@ def copy_model_files(install_path: str) -> bool:
         model_size = os.path.getsize(backup_model_path) / (1024 * 1024 * 1024)  # GB
         log(f"Found backup model: {model_size:.1f}GB", "INFO")
         
-        # Create target directory
-        os.makedirs(target_model_dir, exist_ok=True)
-        log(f"Created model directory: {target_model_dir}", "SUCCESS")
+        # Create models directory (not subdirectory)
+        os.makedirs(target_models_dir, exist_ok=True)
+        log(f"Created models directory: {target_models_dir}", "SUCCESS")
         
-        # Copy model file
+        # Remove target file if it exists (prevent directory creation confusion)
+        if os.path.exists(target_model_path):
+            if os.path.isdir(target_model_path):
+                shutil.rmtree(target_model_path)
+                log("Removed conflicting directory", "INFO")
+            else:
+                os.remove(target_model_path)
+                log("Removed existing model file", "INFO")
+        
+        # Copy model file directly to ezlocalai root
         log("Copying model file... (this may take a moment)")
         shutil.copy2(backup_model_path, target_model_path)
         
-        # Verify copy
-        if os.path.exists(target_model_path):
+        # Verify copy and that it's a file, not directory
+        if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
             target_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)  # GB
             log(f"Model copied successfully: {target_size:.1f}GB", "SUCCESS")
             
@@ -427,7 +436,7 @@ def copy_model_files(install_path: str) -> bool:
             log("Model permissions set", "SUCCESS")
             return True
         else:
-            log("Model copy failed", "ERROR")
+            log("Model copy failed or created directory instead of file", "ERROR")
             return False
             
     except Exception as e:
@@ -722,7 +731,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         log("=" * 50, "INFO")
         
         # Check model file exists
-        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
         if os.path.exists(model_file):
             model_size = os.path.getsize(model_file) / (1024 * 1024 * 1024)  # GB
             log(f"✅ Model file exists: {model_size:.1f}GB", "SUCCESS")
@@ -739,8 +748,8 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             
             # Check critical variables
             required_vars = {
-                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
-                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
                 'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
                 'EZLOCALAI_API_KEY': 'agixt-automation-key',
                 'EZLOCALAI_MAX_TOKENS': '16384',
@@ -771,7 +780,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             if result.returncode == 0:
                 env_vars = result.stdout
                 ezlocalai_checks = {
-                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
                     'LLM_MAX_TOKENS': '16384',
                     'THREADS': '3',
                     'GPU_LAYERS': '0',
@@ -803,7 +812,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
                 env_vars = result.stdout
                 agixt_checks = {
                     'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
-                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
                     'EZLOCALAI_API_KEY': 'agixt-automation-key',
                     'EZLOCALAI_MAX_TOKENS': '16384',
                     'EZLOCALAI_TEMPERATURE': '0.3'
