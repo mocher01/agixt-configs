@@ -1,6 +1,20 @@
-#!/usr/bin/env python3
+def copy_model_files(install_path: str) -> bool:
+    """Copy model files from backup location to AGiXT with HuggingFace structure"""
+    backup_model_path = "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+    
+    # Create HuggingFace-style folder structure
+    hf_model_name = "Qwen2.5-Coder-7B-Instruct-GGUF"
+    target_model_dir = os.path.join(install_path, "ezlocalai", hf_model_name)
+    target_model_path = os.path.join(target_model_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+    
+    try:
+        log("Copying model files with HuggingFace structure...")
+        
+        # Check if backup model exists
+        if not os.path.exists(backup_model_path):
+            log(f"Backup model not found at {backup_model_path}",#!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.2 - ezlocolai fix
+AGiXT Automated Installer - v1.1-proxy-fixed
 =============================================
 
 Complete AGiXT installation with:
@@ -29,7 +43,7 @@ Arguments:
 Features v1.1-proxy-fixed:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
 - 🤖 EzLocalAI: Ready for manual model selection
-- 📁 Clean naming: /var/apps/agixt-v1.2-ezlocolai
+- 📁 Clean naming: /var/apps/agixt-v1.1-proxy
 - 🔗 Docker networks: agixt-network integration
 - 🔑 Secure API key generation
 - 🎯 Optimized for: n8n workflows, server scripts, automation
@@ -46,7 +60,7 @@ from typing import Dict, Optional
 import json
 
 # Version info
-VERSION = "v1.2-ezlocolai-fixed"
+VERSION = "v1.2-ezlocolai"
 INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
 
 def log(message: str, level: str = "INFO"):
@@ -255,8 +269,8 @@ def get_env_config() -> Dict[str, str]:
         'AUTH_WEB': 'https://agixtui.locod-ai.com/user',
         
         # Interface management - Complete setup
-        'APP_NAME': 'AGiXT Production Server v1.1-proxy-fixed',
-        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Manual Model Selection',
+        'APP_NAME': 'AGiXT Production Server v1.2-ezlocolai',
+        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Qwen2.5 Model Integration',
         'AGIXT_AGENT': 'CodeAssistant',
         'AGIXT_SHOW_SELECTION': 'agent,conversation',
         'AGIXT_SHOW_AGENT_BAR': 'true',
@@ -264,7 +278,7 @@ def get_env_config() -> Dict[str, str]:
         'AGIXT_CONVERSATION_MODE': 'select',
         'INTERACTIVE_MODE': 'chat',
         'THEME_NAME': 'doom',
-        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy-fixed - Manual Model Selection',
+        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.2-ezlocolai - Qwen2.5 Model Integration',
         
         # Authentication & agents
         'AUTH_PROVIDER': 'magicalauth',
@@ -296,14 +310,14 @@ def get_env_config() -> Dict[str, str]:
         # EzLocalAI Integration - MODEL CONFIGURATION
         'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
         'EZLOCALAI_API_KEY': 'agixt-automation-key',
-        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+        'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
         'EZLOCALAI_MAX_TOKENS': '16384',
         'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
         'EZLOCALAI_TOP_P': '0.9',
         'EZLOCALAI_VOICE': 'DukeNukem',
         
-        # EzLocalAI Server Configuration - WITH MODEL
-        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+        # EzLocalAI Server Configuration - WITH HUGGINGFACE MODEL
+        'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
         'LLM_MAX_TOKENS': '16384',
         'THREADS': '3',  # Leave 1 core for system
         'GPU_LAYERS': '0',  # CPU only
@@ -326,7 +340,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write(f"# AGiXT Server Configuration - {VERSION}\n")
             f.write("# =============================================================================\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write("# Features: Nginx Proxy + EzLocalAI + Manual Model Selection + GraphQL\n")
+            f.write("# Features: Nginx Proxy + EzLocalAI + Qwen2.5 Model + GraphQL\n")
             f.write("# Domains: https://agixt.locod-ai.com + https://agixtui.locod-ai.com\n")
             f.write("# Optimization: Code generation, n8n workflows, server automation\n")
             f.write("# =============================================================================\n\n")
@@ -353,7 +367,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                 f.write("\n")
             
             f.write("# =============================================================================\n")
-            f.write("# CONFIGURATION NOTES v1.1-proxy-fixed\n")
+            f.write("# CONFIGURATION NOTES v1.2-ezlocolai\n")
             f.write("# =============================================================================\n")
             f.write("# 🔑 SECURITY:\n")
             f.write("#    - Auto-generated secure API key for JWT authentication\n")
@@ -365,7 +379,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write("#    - EzLocalAI: Direct access at http://162.55.213.90:8091\n")
             f.write("#\n")
             f.write("# 🤖 EZLOCALAI - QWEN2.5 CODER MODEL:\n")
-            f.write("#    - Model: Qwen2.5-Coder-7B-Instruct (Q4_K_M quantization)\n")
+            f.write("#    - Model: Qwen2.5-Coder-7B-Instruct-GGUF (HuggingFace structure)\n")
             f.write("#    - Purpose: Python scripts, bash automation, n8n workflows\n")
             f.write("#    - Temperature: 0.3 (precise code generation)\n")
             f.write("#    - Max Tokens: 16384 (long code blocks)\n")
@@ -378,8 +392,9 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write("#\n")
             f.write("# 🎯 MODEL INTEGRATION:\n")
             f.write("#    - Model file copied from backup location\n")
-            f.write("#    - Configured for immediate use\n")
-            f.write("#    - Ready for agent creation\n")
+            f.write("#    - HuggingFace-style directory structure created\n")
+            f.write("#    - Config files generated for compatibility\n")
+            f.write("#    - Ready for immediate use\n")
             f.write("#    - Validated configuration\n")
             f.write("# =============================================================================\n")
         
@@ -392,13 +407,16 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
         return False
 
 def copy_model_files(install_path: str) -> bool:
-    """Copy model files from backup location to AGiXT"""
+    """Copy model files from backup location to AGiXT with HuggingFace structure"""
     backup_model_path = "/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-    target_models_dir = os.path.join(install_path, "ezlocalai")
-    target_model_path = os.path.join(target_models_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+    
+    # Create HuggingFace-style folder structure
+    hf_model_name = "Qwen2.5-Coder-7B-Instruct-GGUF"
+    target_model_dir = os.path.join(install_path, "ezlocalai", hf_model_name)
+    target_model_path = os.path.join(target_model_dir, "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
     
     try:
-        log("Copying model files from backup location...")
+        log("Creating HuggingFace-style model structure...")
         
         # Check if backup model exists
         if not os.path.exists(backup_model_path):
@@ -409,22 +427,39 @@ def copy_model_files(install_path: str) -> bool:
         model_size = os.path.getsize(backup_model_path) / (1024 * 1024 * 1024)  # GB
         log(f"Found backup model: {model_size:.1f}GB", "INFO")
         
-        # Create models directory (not subdirectory)
-        os.makedirs(target_models_dir, exist_ok=True)
-        log(f"Created models directory: {target_models_dir}", "SUCCESS")
+        # Create HuggingFace-style directory structure
+        os.makedirs(target_model_dir, exist_ok=True)
+        log(f"Created HuggingFace model directory: {target_model_dir}", "SUCCESS")
         
-        # Remove target file if it exists (prevent directory creation confusion)
-        if os.path.exists(target_model_path):
-            if os.path.isdir(target_model_path):
-                shutil.rmtree(target_model_path)
-                log("Removed conflicting directory", "INFO")
-            else:
-                os.remove(target_model_path)
-                log("Removed existing model file", "INFO")
-        
-        # Copy model file directly to ezlocalai root
+        # Copy model file
         log("Copying model file... (this may take a moment)")
         shutil.copy2(backup_model_path, target_model_path)
+        
+        # Create minimal HuggingFace config files
+        log("Creating HuggingFace config files...")
+        
+        # Create config.json
+        config_json = {
+            "architectures": ["Qwen2ForCausalLM"],
+            "model_type": "qwen2",
+            "quantization_config": {
+                "quant_method": "gguf",
+                "bits": 4
+            },
+            "torch_dtype": "float16"
+        }
+        
+        with open(os.path.join(target_model_dir, "config.json"), 'w') as f:
+            json.dump(config_json, f, indent=2)
+        
+        # Create tokenizer_config.json
+        tokenizer_config = {
+            "model_max_length": 16384,
+            "tokenizer_class": "Qwen2Tokenizer"
+        }
+        
+        with open(os.path.join(target_model_dir, "tokenizer_config.json"), 'w') as f:
+            json.dump(tokenizer_config, f, indent=2)
         
         # Verify copy and that it's a file, not directory
         if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
@@ -434,6 +469,7 @@ def copy_model_files(install_path: str) -> bool:
             # Set proper permissions
             os.chmod(target_model_path, 0o644)
             log("Model permissions set", "SUCCESS")
+            log("HuggingFace config files created", "SUCCESS")
             return True
         else:
             log("Model copy failed or created directory instead of file", "ERROR")
@@ -452,7 +488,7 @@ def update_docker_compose(install_path: str) -> bool:
         return False
     
     try:
-        log("Updating docker-compose.yml for v1.1-proxy-fixed...")
+        log("Updating docker-compose.yml for v1.2-ezlocolai...")
         
         # Read original docker-compose.yml
         with open(compose_file, 'r') as f:
@@ -593,7 +629,7 @@ services:
         with open(compose_file, 'w') as f:
             f.write(enhanced_compose)
         
-        log("docker-compose.yml updated for v1.1-proxy-fixed with Qwen2.5 model", "SUCCESS")
+        log("docker-compose.yml updated for v1.2-ezlocolai with Qwen2.5 model", "SUCCESS")
         return True
         
     except Exception as e:
@@ -605,7 +641,7 @@ def install_dependencies_and_start(install_path: str) -> bool:
     try:
         os.chdir(install_path)
         
-        log("🚀 Starting AGiXT v1.1-proxy-fixed services...", "INFO")
+        log("🚀 Starting AGiXT v1.2-ezlocolai services...", "INFO")
         log("📋 Configuration loaded from .env file", "INFO")
         log("🤖 EzLocalAI will start with Qwen2.5-Coder model", "INFO")
         
@@ -731,7 +767,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         log("=" * 50, "INFO")
         
         # Check model file exists
-        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
+        model_file = os.path.join(install_path, "ezlocalai", "Qwen2.5-Coder-7B-Instruct-GGUF", "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf")
         if os.path.exists(model_file):
             model_size = os.path.getsize(model_file) / (1024 * 1024 * 1024)  # GB
             log(f"✅ Model file exists: {model_size:.1f}GB", "SUCCESS")
@@ -748,8 +784,8 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             
             # Check critical variables
             required_vars = {
-                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
-                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
+                'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
                 'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
                 'EZLOCALAI_API_KEY': 'agixt-automation-key',
                 'EZLOCALAI_MAX_TOKENS': '16384',
@@ -780,7 +816,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
             if result.returncode == 0:
                 env_vars = result.stdout
                 ezlocalai_checks = {
-                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                    'DEFAULT_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
                     'LLM_MAX_TOKENS': '16384',
                     'THREADS': '3',
                     'GPU_LAYERS': '0',
@@ -812,7 +848,7 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
                 env_vars = result.stdout
                 agixt_checks = {
                     'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
-                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf',
+                    'EZLOCALAI_MODEL': 'Qwen2.5-Coder-7B-Instruct-GGUF',
                     'EZLOCALAI_API_KEY': 'agixt-automation-key',
                     'EZLOCALAI_MAX_TOKENS': '16384',
                     'EZLOCALAI_TEMPERATURE': '0.3'
@@ -882,8 +918,8 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         log("=" * 50, "INFO")
         log("🎯 Model Integration Status:", "INFO")
         log(f"  📦 Model File: {model_file}", "INFO")
-        log("  🔧 Configuration: Qwen2.5-Coder-7B-Instruct", "INFO")
-        log("  📁 Installation: /var/apps/agixt-v1.1-proxy-fixed", "INFO")
+        log("  🔧 Configuration: Qwen2.5-Coder-7B-Instruct-GGUF", "INFO")
+        log("  📁 Installation: /var/apps/agixt-v1.2-ezlocolai", "INFO")
         log("", "INFO")
         log("✅ EzLocalAI validation completed", "SUCCESS")
         
@@ -1041,7 +1077,7 @@ def main():
     # Success message
     log("Installation completed successfully!", "SUCCESS")
     print("\n" + "="*70)
-    print("🎉 AGiXT v1.1-proxy-fixed Installation Complete!")
+    print("🎉 AGiXT v1.2-ezlocolai Installation Complete!")
     print("="*70)
     print(f"📁 Directory: {install_path}")
     print(f"🌐 Frontend (via proxy): https://agixtui.locod-ai.com")
@@ -1061,7 +1097,7 @@ def main():
     print()
     print("🎯 Features Implemented:")
     print("   ✅ Secure API key generation (JWT authentication)")
-    print("   ✅ Qwen2.5-Coder model integration")
+    print("   ✅ Qwen2.5-Coder model with HuggingFace structure")
     print("   ✅ Model copied from backup location")
     print("   ✅ Complete EzLocalAI configuration")
     print("   ✅ Nginx reverse proxy ready")
@@ -1077,7 +1113,7 @@ def main():
     print()
     print("🔑 Important:")
     print("   - API Key has been auto-generated for security")
-    print("   - Qwen2.5-Coder model is ready for use")
+    print("   - Qwen2.5-Coder model is ready with HuggingFace structure")
     print("   - All EzLocalAI variables validated")
     print("   - Model file copied and configured")
     print("="*70)
