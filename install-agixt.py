@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-import os
-import urllib.request
-from urllib.request import Request, urlopen
-from dotenv import load_dotenv
-load_dotenv('.env')
-
 """
 AGiXT Automated Installer - v1.3-ezlocolai-deepseek
 ================================================
@@ -45,6 +39,49 @@ Features v1.3-ezlocolai-deepseek:
 - 🎯 Optimized for: 16GB RAM servers, n8n workflows, server scripts
 """
 
+import os
+import os
+import urllib.request
+from urllib.request import Request, urlopen
+from dotenv import load_dotenv
+load_dotenv('.env')
+
+def download_with_auth(url, target_path):
+    token = os.getenv("HUGGINGFACE_TOKEN")
+    if not token:
+        raise Exception("Missing HUGGINGFACE_TOKEN in environment variables.")
+    req = Request(url)
+    req.add_header("Authorization", f"Bearer {token}")
+    with urlopen(req) as response, open(target_path, 'wb') as out_file:
+        out_file.write(response.read())
+import sys
+import subprocess
+import time
+import shutil
+import secrets
+import json
+import urllib.request
+import urllib.error
+from datetime import datetime
+from typing import Dict, Optional
+
+# Version info
+VERSION = "v1.3-ezlocolai-deepseek"
+INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
+
+# Model configuration - LIGHTWEIGHT
+MODEL_CONFIG = {
+    "name": "Deepseek-Coder-1.3B-Instruct",
+    "file": "Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
+    "backup_path": "/var/backups/ezlocalai-models-20250601/Deepseek-Coder-1.3B-Instruct/Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
+    "download_url": "https://huggingface.co/deepseek-ai/Deepseek-Coder-1.3B-Instruct-GGUF/resolve/main/Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
+    "expected_size_gb": 1.0,
+    "max_tokens": 32768,
+    "hidden_size": 1536,
+    "num_layers": 28,
+    "num_heads": 12,
+    "num_kv_heads": 2
+}
 
 def log(message: str, level: str = "INFO"):
     """Enhanced logging with timestamps"""
@@ -888,17 +925,6 @@ def validate_ezlocalai_configuration(install_path: str) -> bool:
         # Test API endpoints
         log("🔍 Testing API endpoints:", "INFO")
         import socket
-
-
-def download_with_auth(url, target_path):
-    token = os.getenv("HUGGINGFACE_TOKEN")
-    if not token:
-        raise Exception("Missing HUGGINGFACE_TOKEN in environment variables.")
-    req = Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    with urlopen(req) as response, open(target_path, 'wb') as out_file:
-        out_file.write(response.read())
-
         
         endpoints = {
             'EzLocalAI API': 8091,
@@ -983,6 +1009,14 @@ def verify_installation(install_path: str):
         # Test endpoints
         import socket
         import urllib.request
+        import urllib.error
+        
+        endpoints = {
+            'AGiXT Frontend': 3437,
+            'AGiXT API': 7437,
+            'EzLocalAI API': 8091,
+            'EzLocalAI UI': 8502
+        }
         
         for name, port in endpoints.items():
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
