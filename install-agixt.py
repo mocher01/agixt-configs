@@ -1,270 +1,156 @@
-#!/bin/bash
-# =============================================================================
-# Fix EzLocalAI Model Configuration - Keep Existing Installation
-# =============================================================================
-# Only updates model configuration, keeps everything else intact
-# =============================================================================
+# Fixed section for the installer script - replace the problematic part
 
-set -e
+def update_docker_compose(install_path: str) -> bool:
+    """Update docker-compose.yml for proxy setup and EzLocalAI"""
+    compose_file = os.path.join(install_path, "docker-compose.yml")
+    
+    if not os.path.exists(compose_file):
+        log(f"docker-compose.yml not found at {compose_file}", "ERROR")
+        return False
+    
+    try:
+        log("Updating docker-compose.yml for v1.1-proxy-fixed...")
+        
+        # Read original docker-compose.yml
+        with open(compose_file, 'r') as f:
+            content = f.read()
+        
+        # Backup original
+        backup_file = compose_file + f".backup-{VERSION}"
+        with open(backup_file, 'w') as f:
+            f.write(content)
+        log(f"Backup created: {backup_file}")
+        
+        # Create the enhanced docker-compose.yml
+        enhanced_compose = """networks:
+  agixt-network:
+    external: true
 
-echo "🎯 EzLocalAI Model Fix - Targeted Update"
-echo "========================================"
+services:
+  # EzLocalAI - Manual Model Selection
+  ezlocalai:
+    image: joshxt/ezlocalai:main
+    container_name: ezlocalai
+    restart: unless-stopped
+    environment:
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
+      - THREADS=${THREADS}
+      - GPU_LAYERS=${GPU_LAYERS}
+      - WHISPER_MODEL=${WHISPER_MODEL}
+      - IMG_ENABLED=${IMG_ENABLED}
+      - AUTO_UPDATE=${AUTO_UPDATE}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
+      - EZLOCALAI_URL=http://ezlocalai:8091
+      - DEFAULT_MODEL=${DEFAULT_MODEL}
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./ezlocalai:/app/models
+      - ./ezlocalai/voices:/app/voices
+    networks:
+      - agixt-network
 
-# Configuration
-INSTALL_DIR="/var/apps/agixt-v1.2-ezlocolai model"
-BACKUP_MODEL="/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-TARGET_MODEL_DIR="$INSTALL_DIR/ezlocalai/Qwen2.5-Coder-7B-Instruct"
-TARGET_MODEL_FILE="$TARGET_MODEL_DIR/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-MODEL_PATH_FOR_ENV="Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  # AGiXT Backend API
+  agixt:
+    image: joshxt/agixt:main
+    container_name: agixt
+    restart: unless-stopped
+    depends_on:
+      - ezlocalai
+    environment:
+      # Version & Basic Configuration
+      - AGIXT_VERSION=${AGIXT_VERSION}
+      - INSTALL_DATE=${INSTALL_DATE}
+      - AGIXT_AUTO_UPDATE=${AGIXT_AUTO_UPDATE}
+      - AGIXT_API_KEY=${AGIXT_API_KEY}
+      - UVICORN_WORKERS=${UVICORN_WORKERS}
+      - WORKING_DIRECTORY=${WORKING_DIRECTORY}
+      - TZ=${TZ}
+      # URLs
+      - AGIXT_SERVER=${AGIXT_SERVER}
+      - AGIXT_URI=${AGIXT_URI}
+      # System Configuration
+      - DATABASE_TYPE=${DATABASE_TYPE}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FORMAT=${LOG_FORMAT}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS}
+      - AGIXT_BRANCH=${AGIXT_BRANCH}
+      - AGIXT_REQUIRE_API_KEY=${AGIXT_REQUIRE_API_KEY}
+      # GraphQL Support
+      - GRAPHIQL=${GRAPHIQL}
+      - ENABLE_GRAPHQL=${ENABLE_GRAPHQL}
+      # EzLocalAI Integration
+      - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
+      - EZLOCALAI_MAX_TOKENS=${EZLOCALAI_MAX_TOKENS}
+      - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
+      - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
+      - EZLOCALAI_VOICE=${EZLOCALAI_VOICE}
+      # External Services
+      - TEXTGEN_URI=${TEXTGEN_URI}
+      - N8N_URI=${N8N_URI}
+    ports:
+      - "7437:7437"
+    volumes:
+      - ./models:/agixt/models
+      - ./WORKSPACE:/agixt/WORKSPACE
+      - ./agixt:/agixt
+    networks:
+      - agixt-network
 
-echo "📁 Installation directory: $INSTALL_DIR"
-echo "📦 Source model: $BACKUP_MODEL"
-echo "🎯 Target location: $TARGET_MODEL_FILE"
-
-# Step 1: Verify existing installation
-echo ""
-echo "🔍 Step 1: Verify Existing Installation"
-echo "---------------------------------------"
-
-if [[ ! -d "$INSTALL_DIR" ]]; then
-    echo "❌ AGiXT installation not found at $INSTALL_DIR"
-    exit 1
-fi
-
-if [[ ! -f "$INSTALL_DIR/.env" ]]; then
-    echo "❌ .env file not found at $INSTALL_DIR/.env"
-    exit 1
-fi
-
-if [[ ! -f "$INSTALL_DIR/docker-compose.yml" ]]; then
-    echo "❌ docker-compose.yml not found at $INSTALL_DIR/docker-compose.yml"
-    exit 1
-fi
-
-echo "✅ AGiXT installation found"
-echo "✅ .env file found"
-echo "✅ docker-compose.yml found"
-
-# Step 2: Verify backup model
-echo ""
-echo "🔍 Step 2: Verify Backup Model"
-echo "------------------------------"
-
-if [[ ! -f "$BACKUP_MODEL" ]]; then
-    echo "❌ Backup model not found at $BACKUP_MODEL"
-    exit 1
-fi
-
-MODEL_SIZE=$(du -h "$BACKUP_MODEL" | cut -f1)
-echo "✅ Backup model found"
-echo "📦 Model size: $MODEL_SIZE"
-
-# Step 3: Stop containers (keep data)
-echo ""
-echo "🛑 Step 3: Stop Containers (Preserve Data)"
-echo "------------------------------------------"
-
-cd "$INSTALL_DIR"
-echo "Stopping containers..."
-docker compose down
-echo "✅ Containers stopped"
-
-# Step 4: Copy model to correct location
-echo ""
-echo "📋 Step 4: Copy Model to AGiXT Location"
-echo "---------------------------------------"
-
-# Create model directory
-echo "Creating model directory..."
-mkdir -p "$TARGET_MODEL_DIR"
-
-# Copy model file
-echo "Copying model file..."
-echo "From: $BACKUP_MODEL"
-echo "To: $TARGET_MODEL_FILE"
-
-cp "$BACKUP_MODEL" "$TARGET_MODEL_FILE"
-
-if [[ -f "$TARGET_MODEL_FILE" ]]; then
-    TARGET_SIZE=$(du -h "$TARGET_MODEL_FILE" | cut -f1)
-    echo "✅ Model copied successfully"
-    echo "📦 Target size: $TARGET_SIZE"
-else
-    echo "❌ Model copy failed"
-    exit 1
-fi
-
-# Set proper permissions
-chown -R 1000:1000 "$INSTALL_DIR/ezlocalai" 2>/dev/null || true
-chmod -R 755 "$INSTALL_DIR/ezlocalai"
-echo "✅ Permissions set"
-
-# Step 5: Update .env file (only model variables)
-echo ""
-echo "🔧 Step 5: Update Model Configuration in .env"
-echo "----------------------------------------------"
-
-ENV_FILE="$INSTALL_DIR/.env"
-ENV_BACKUP="$ENV_FILE.backup-$(date +%Y%m%d-%H%M%S)"
-
-# Backup .env file
-cp "$ENV_FILE" "$ENV_BACKUP"
-echo "📋 .env backed up to: $ENV_BACKUP"
-
-# Update specific model variables
-echo "Updating model variables..."
-
-# Update DEFAULT_MODEL
-if grep -q "^DEFAULT_MODEL=" "$ENV_FILE"; then
-    sed -i "s|^DEFAULT_MODEL=.*|DEFAULT_MODEL=$MODEL_PATH_FOR_ENV|" "$ENV_FILE"
-    echo "✅ Updated DEFAULT_MODEL"
-else
-    echo "DEFAULT_MODEL=$MODEL_PATH_FOR_ENV" >> "$ENV_FILE"
-    echo "✅ Added DEFAULT_MODEL"
-fi
-
-# Update EZLOCALAI_MODEL if it exists
-if grep -q "^EZLOCALAI_MODEL=" "$ENV_FILE"; then
-    sed -i "s|^EZLOCALAI_MODEL=.*|EZLOCALAI_MODEL=$MODEL_PATH_FOR_ENV|" "$ENV_FILE"
-    echo "✅ Updated EZLOCALAI_MODEL"
-fi
-
-echo "✅ Model configuration updated in .env"
-
-# Step 6: Update docker-compose.yml (only model environment)
-echo ""
-echo "🔧 Step 6: Update Docker Compose Model Environment"
-echo "---------------------------------------------------"
-
-COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
-COMPOSE_BACKUP="$COMPOSE_FILE.backup-$(date +%Y%m%d-%H%M%S)"
-
-# Backup docker-compose.yml
-cp "$COMPOSE_FILE" "$COMPOSE_BACKUP"
-echo "📋 docker-compose.yml backed up to: $COMPOSE_BACKUP"
-
-# Update DEFAULT_MODEL in ezlocalai service environment
-if grep -A 20 "ezlocalai:" "$COMPOSE_FILE" | grep -q "DEFAULT_MODEL"; then
-    # Replace existing DEFAULT_MODEL line
-    sed -i "/ezlocalai:/,/^[[:space:]]*[a-zA-Z]/ s|DEFAULT_MODEL=.*|DEFAULT_MODEL=$MODEL_PATH_FOR_ENV|" "$COMPOSE_FILE"
-    echo "✅ Updated DEFAULT_MODEL in docker-compose.yml"
-else
-    # Add DEFAULT_MODEL to ezlocalai environment section
-    sed -i "/ezlocalai:/,/^[[:space:]]*[a-zA-Z]/ {
-        /environment:/a\
-      - DEFAULT_MODEL=$MODEL_PATH_FOR_ENV
-    }" "$COMPOSE_FILE"
-    echo "✅ Added DEFAULT_MODEL to docker-compose.yml"
-fi
-
-echo "✅ Docker compose configuration updated"
-
-# Step 7: Start containers
-echo ""
-echo "🚀 Step 7: Start Containers"
-echo "---------------------------"
-
-echo "Starting containers..."
-docker compose up -d
-
-echo "⏱️ Waiting for services to initialize..."
-sleep 30
-
-echo "✅ Containers started"
-
-# Step 8: Validation and Control Checks
-echo ""
-echo "🔍 Step 8: Validation and Control Checks"
-echo "========================================="
-
-echo ""
-echo "📋 Configuration Validation:"
-echo "----------------------------"
-
-# Check .env variables
-echo "🔍 Checking .env variables:"
-if grep -q "^DEFAULT_MODEL=$MODEL_PATH_FOR_ENV" "$ENV_FILE"; then
-    echo "  ✅ DEFAULT_MODEL correctly set to: $MODEL_PATH_FOR_ENV"
-else
-    echo "  ❌ DEFAULT_MODEL not set correctly"
-fi
-
-# Check model file exists
-echo ""
-echo "🔍 Checking model file:"
-if [[ -f "$TARGET_MODEL_FILE" ]]; then
-    FILE_SIZE=$(du -h "$TARGET_MODEL_FILE" | cut -f1)
-    echo "  ✅ Model file exists: $TARGET_MODEL_FILE"
-    echo "  📦 Size: $FILE_SIZE"
-else
-    echo "  ❌ Model file missing: $TARGET_MODEL_FILE"
-fi
-
-# Check container status
-echo ""
-echo "🔍 Checking container status:"
-CONTAINERS=$(docker compose ps --format "table {{.Name}}\t{{.Status}}")
-echo "$CONTAINERS"
-
-# Check if ezlocalai is running
-if docker compose ps | grep -q "ezlocalai.*Up"; then
-    echo "  ✅ EzLocalAI container is running"
-else
-    echo "  ❌ EzLocalAI container is not running"
-fi
-
-# Check ezlocalai logs for model loading
-echo ""
-echo "🔍 Checking EzLocalAI logs for model loading:"
-echo "----------------------------------------------"
-sleep 10  # Wait a bit more for logs
-LOGS=$(docker compose logs ezlocalai --tail 20 2>/dev/null || echo "Could not fetch logs")
-echo "$LOGS"
-
-if echo "$LOGS" | grep -q "Qwen2.5-Coder"; then
-    echo "  ✅ Model appears to be loading in logs"
-else
-    echo "  ⚠️  Model loading not clearly visible in logs yet"
-fi
-
-# Check API endpoints
-echo ""
-echo "🔍 Checking API endpoints:"
-echo "-------------------------"
-
-# Check EzLocalAI API
-if curl -s http://localhost:8091/health >/dev/null 2>&1; then
-    echo "  ✅ EzLocalAI API responding on port 8091"
-else
-    echo "  ⚠️  EzLocalAI API not responding yet on port 8091"
-fi
-
-# Check AGiXT API
-if curl -s http://localhost:7437 >/dev/null 2>&1; then
-    echo "  ✅ AGiXT API responding on port 7437"
-else
-    echo "  ⚠️  AGiXT API not responding yet on port 7437"
-fi
-
-# Final summary
-echo ""
-echo "📊 FINAL SUMMARY"
-echo "================"
-echo "🎯 Model Integration Status:"
-echo "  📦 Model file: $TARGET_MODEL_FILE"
-echo "  🔧 Configuration: $MODEL_PATH_FOR_ENV"
-echo "  📁 Installation: $INSTALL_DIR"
-echo ""
-echo "🔧 Next Steps:"
-echo "  1. Wait 2-3 minutes for full startup"
-echo "  2. Check EzLocalAI interface: http://162.55.213.90:8091"
-echo "  3. Verify model is loaded and selectable"
-echo "  4. Test chat functionality in AGiXT"
-echo ""
-echo "📋 Troubleshooting Commands:"
-echo "  cd $INSTALL_DIR"
-echo "  docker compose logs ezlocalai -f    # Watch EzLocalAI logs"
-echo "  docker compose logs agixt -f        # Watch AGiXT logs"
-echo "  docker compose restart ezlocalai    # Restart EzLocalAI only"
-echo ""
-echo "✅ Model integration completed!"
+  # AGiXT Frontend Interface
+  agixtinteractive:
+    image: joshxt/agixt-interactive:main
+    container_name: agixtinteractive
+    restart: unless-stopped
+    depends_on:
+      - agixt
+    environment:
+      # Interface Configuration
+      - APP_NAME=${APP_NAME}
+      - APP_DESCRIPTION=${APP_DESCRIPTION}
+      - APP_URI=${APP_URI}
+      - AUTH_WEB=${AUTH_WEB}
+      - AGIXT_AGENT=${AGIXT_AGENT}
+      - AGIXT_SHOW_SELECTION=${AGIXT_SHOW_SELECTION}
+      - AGIXT_SHOW_AGENT_BAR=${AGIXT_SHOW_AGENT_BAR}
+      - AGIXT_SHOW_APP_BAR=${AGIXT_SHOW_APP_BAR}
+      - AGIXT_CONVERSATION_MODE=${AGIXT_CONVERSATION_MODE}
+      - INTERACTIVE_MODE=${INTERACTIVE_MODE}
+      - THEME_NAME=${THEME_NAME}
+      - AGIXT_FOOTER_MESSAGE=${AGIXT_FOOTER_MESSAGE}
+      # Authentication
+      - AUTH_PROVIDER=${AUTH_PROVIDER}
+      - CREATE_AGENT_ON_REGISTER=${CREATE_AGENT_ON_REGISTER}
+      - CREATE_AGIXT_AGENT=${CREATE_AGIXT_AGENT}
+      - ALLOW_EMAIL_SIGN_IN=${ALLOW_EMAIL_SIGN_IN}
+      # Features
+      - AGIXT_FILE_UPLOAD_ENABLED=${AGIXT_FILE_UPLOAD_ENABLED}
+      - AGIXT_VOICE_INPUT_ENABLED=${AGIXT_VOICE_INPUT_ENABLED}
+      - AGIXT_RLHF=${AGIXT_RLHF}
+      - AGIXT_ALLOW_MESSAGE_EDITING=${AGIXT_ALLOW_MESSAGE_EDITING}
+      - AGIXT_ALLOW_MESSAGE_DELETION=${AGIXT_ALLOW_MESSAGE_DELETION}
+      - AGIXT_SHOW_OVERRIDE_SWITCHES=${AGIXT_SHOW_OVERRIDE_SWITCHES}
+      # Backend Connection
+      - AGIXT_SERVER=${AGIXT_SERVER}
+      - AGIXT_URI=http://agixt:7437
+      - TZ=${TZ}
+    ports:
+      - "3437:3437"
+    volumes:
+      - ./WORKSPACE:/app/WORKSPACE
+    networks:
+      - agixt-network
+"""
+        
+        # Write the enhanced docker-compose.yml
+        with open(compose_file, 'w') as f:
+            f.write(enhanced_compose)
+        
+        log("docker-compose.yml updated for v1.1-proxy-fixed with manual EzLocalAI", "SUCCESS")
+        return True
+        
+    except Exception as e:
+        log(f"Failed to update docker-compose.yml: {e}", "ERROR")
+        return False
