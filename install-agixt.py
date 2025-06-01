@@ -12,12 +12,12 @@ Complete AGiXT installation with:
 ✅ Professional production setup
 
 Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
+  python3 install-agixt-no-local.py [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
 
 Examples:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - --no-cleanup proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy github_pat_xxx
+  python3 install-agixt-no-local.py proxy
+  python3 install-agixt-no-local.py --no-cleanup proxy
+  python3 install-agixt-no-local.py proxy github_pat_xxx
 
 Options:
   --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
@@ -661,27 +661,4 @@ def verify_installation(install_path: str):
                 if e.code == 405:
                     log("GraphQL endpoint is accessible (GET method not allowed - normal)", "SUCCESS")
                 else:
-                    log(f"GraphQL endpoint returned HTTP {e.code}", "WARN")
-        except Exception as e:
-            log(f"GraphQL endpoint test failed: {e}", "WARN")
-            
-    except Exception as e:
-        log(f"Could not verify installation: {e}", "WARN")
-
-def main():
-    """Main installation function"""
-    print("╔═══════════════════════════════════════════════════════════════╗")
-    print(f"║                 AGiXT Installer {VERSION}                  ║")
-    print("║       Nginx Proxy + External AI Providers + GraphQL         ║")
-    print("╚═══════════════════════════════════════════════════════════════╝")
-    
-    # Parse command line arguments
-    config_name = "proxy"
-    github_token = None
-    skip_cleanup = False
-    
-    if len(sys.argv) > 1:
-        for i, arg in enumerate(sys.argv[1:], 1):
-            if arg == "--no-cleanup" or arg == "--skip-cleanup":
-                skip_cleanup = True
-                log("Cleanup disable
+                    log
