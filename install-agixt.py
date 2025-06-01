@@ -1,852 +1,270 @@
+#!/bin/bash
+# =============================================================================
+# Fix EzLocalAI Model Configuration - Keep Existing Installation
+# =============================================================================
+# Only updates model configuration, keeps everything else intact
+# =============================================================================
 
-#!/usr/bin/env python3
-"""
-AGiXT Automated Installer - v1.1-proxy-fixed
-=============================================
+set -e
 
-Complete AGiXT installation with:
-✅ Nginx reverse proxy integration (agixt.locod-ai.com / agixtui.locod-ai.com)
-✅ EzLocalAI integration (manual model selection)
-✅ Clean folder naming (/var/apps/agixt-v1.1-proxy)
-✅ Docker network integration
-✅ GraphQL management interface
-✅ Professional production setup
+echo "🎯 EzLocalAI Model Fix - Targeted Update"
+echo "========================================"
 
-Usage:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
+# Configuration
+INSTALL_DIR="/var/apps/agixt-v1.1-proxy-fixed"
+BACKUP_MODEL="/var/backups/ezlocalai-models-20250601/Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+TARGET_MODEL_DIR="$INSTALL_DIR/ezlocalai/Qwen2.5-Coder-7B-Instruct"
+TARGET_MODEL_FILE="$TARGET_MODEL_DIR/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+MODEL_PATH_FOR_ENV="Qwen2.5-Coder-7B-Instruct/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
 
-Examples:
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - --no-cleanup proxy
-  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy github_pat_xxx
+echo "📁 Installation directory: $INSTALL_DIR"
+echo "📦 Source model: $BACKUP_MODEL"
+echo "🎯 Target location: $TARGET_MODEL_FILE"
 
-Options:
-  --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
-  
-Arguments:
-  CONFIG_NAME     Configuration name (default: proxy)
-  GITHUB_TOKEN    GitHub token for private repos (optional)
+# Step 1: Verify existing installation
+echo ""
+echo "🔍 Step 1: Verify Existing Installation"
+echo "---------------------------------------"
 
-Features v1.1-proxy-fixed:
-- 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
-- 🤖 EzLocalAI: Ready for manual model selection
-- 📁 Clean naming: /var/apps/agixt-v1.1-proxy
-- 🔗 Docker networks: agixt-network integration
-- 🔑 Secure API key generation
-- 🎯 Optimized for: n8n workflows, server scripts, automation
-"""
+if [[ ! -d "$INSTALL_DIR" ]]; then
+    echo "❌ AGiXT installation not found at $INSTALL_DIR"
+    exit 1
+fi
 
-import os
-import sys
-import subprocess
-import time
-import shutil
-import secrets
-from datetime import datetime
-from typing import Dict, Optional
-import json
+if [[ ! -f "$INSTALL_DIR/.env" ]]; then
+    echo "❌ .env file not found at $INSTALL_DIR/.env"
+    exit 1
+fi
 
-# Version info
-VERSION = "v1.1-proxy-fixed"
-INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
+if [[ ! -f "$INSTALL_DIR/docker-compose.yml" ]]; then
+    echo "❌ docker-compose.yml not found at $INSTALL_DIR/docker-compose.yml"
+    exit 1
+fi
 
-def log(message: str, level: str = "INFO"):
-    """Enhanced logging with timestamps"""
-    timestamp = datetime.now().strftime("%H:%M:%S")
-    print(f"[{timestamp}] {level}: {message}")
+echo "✅ AGiXT installation found"
+echo "✅ .env file found"
+echo "✅ docker-compose.yml found"
 
-def run_command(command: str, cwd: Optional[str] = None, timeout: int = 300) -> bool:
-    """Execute a shell command with proper error handling"""
-    try:
-        log(f"Running: {command}")
-        result = subprocess.run(
-            command.split(), 
-            cwd=cwd, 
-            capture_output=True, 
-            text=True, 
-            timeout=timeout
-        )
-        
-        if result.stdout.strip():
-            log(f"Output: {result.stdout.strip()}")
-        
-        if result.returncode == 0:
-            return True
-        else:
-            log(f"Command failed with return code {result.returncode}", "ERROR")
-            if result.stderr:
-                log(f"Error: {result.stderr}", "ERROR")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        log(f"Command timed out after {timeout} seconds", "ERROR")
-        return False
-    except Exception as e:
-        log(f"Error executing command: {e}", "ERROR")
-        return False
+# Step 2: Verify backup model
+echo ""
+echo "🔍 Step 2: Verify Backup Model"
+echo "------------------------------"
 
-def check_prerequisites() -> bool:
-    """Check if all required tools are installed"""
-    tools = {
-        'git': 'git --version',
-        'docker': 'docker --version', 
-        'docker-compose': 'docker compose version'
-    }
-    
-    log("Checking prerequisites...")
-    for tool, command in tools.items():
-        if run_command(command):
-            log(f"{tool.title()} ✓", "SUCCESS")
-        else:
-            log(f"{tool.title()} not found or not working", "ERROR")
-            return False
-    
-    return True
+if [[ ! -f "$BACKUP_MODEL" ]]; then
+    echo "❌ Backup model not found at $BACKUP_MODEL"
+    exit 1
+fi
 
-def check_docker_network() -> bool:
-    """Check if agixt-network exists, create if not"""
-    log("Checking Docker network...")
-    
-    # Check if network exists
-    result = subprocess.run(
-        ["docker", "network", "ls", "--filter", "name=agixt-network", "--format", "{{.Name}}"],
-        capture_output=True,
-        text=True
-    )
-    
-    if "agixt-network" in result.stdout:
-        log("agixt-network already exists", "SUCCESS")
-        return True
-    
-    # Create the network
-    log("Creating agixt-network...")
-    result = subprocess.run(
-        ["docker", "network", "create", "agixt-network"],
-        capture_output=True,
-        text=True
-    )
-    
-    if result.returncode == 0:
-        log("agixt-network created successfully", "SUCCESS")
-        return True
-    else:
-        log(f"Failed to create agixt-network: {result.stderr}", "ERROR")
-        return False
+MODEL_SIZE=$(du -h "$BACKUP_MODEL" | cut -f1)
+echo "✅ Backup model found"
+echo "📦 Model size: $MODEL_SIZE"
 
-def cleanup_previous_installations():
-    """Clean up any previous AGiXT installations"""
-    base_path = "/var/apps"
-    
-    if not os.path.exists(base_path):
-        os.makedirs(base_path, exist_ok=True)
-        log("Created /var/apps directory", "SUCCESS")
-        return True
-    
-    log("Cleaning up previous installations...")
-    
-    cleanup_count = 0
-    for item in os.listdir(base_path):
-        if item.startswith("agixt-") or item.startswith("AGIXT_"):
-            item_path = os.path.join(base_path, item)
-            if os.path.isdir(item_path):
-                log(f"Cleaning up {item_path}")
-                cleanup_count += 1
-                
-                try:
-                    # Stop docker services if they exist
-                    compose_file = os.path.join(item_path, "docker-compose.yml")
-                    if os.path.exists(compose_file):
-                        log(f"Stopping Docker services in {item}")
-                        result = subprocess.run(
-                            ["docker", "compose", "-f", compose_file, "down"], 
-                            cwd=item_path,
-                            capture_output=True,
-                            text=True,
-                            timeout=60
-                        )
-                        if result.returncode == 0:
-                            log(f"Docker services stopped successfully", "SUCCESS")
-                        else:
-                            log(f"Warning: Could not stop services: {result.stderr}", "WARN")
-                    
-                    # Remove directory
-                    log(f"Removing directory {item_path}")
-                    shutil.rmtree(item_path, ignore_errors=True)
-                    
-                    if not os.path.exists(item_path):
-                        log(f"Directory {item} removed successfully", "SUCCESS")
-                    else:
-                        log(f"Warning: Directory {item} still exists", "WARN")
-                        
-                except Exception as e:
-                    log(f"Warning: Could not fully clean {item}: {e}", "WARN")
-                    # Continue with other installations - don't fail
-    
-    if cleanup_count == 0:
-        log("No previous AGiXT installations found")
-    else:
-        log(f"Cleanup completed - processed {cleanup_count} installations", "SUCCESS")
-    
-    return True  # Always return True - cleanup should never stop installation
+# Step 3: Stop containers (keep data)
+echo ""
+echo "🛑 Step 3: Stop Containers (Preserve Data)"
+echo "------------------------------------------"
 
-def create_installation_directory(config_name: str = "proxy") -> Optional[str]:
-    """Create the installation directory with clean naming"""
-    install_path = f"/var/apps/{INSTALL_FOLDER_NAME}"
-    
-    try:
-        os.makedirs(install_path, exist_ok=True)
-        log(f"Created installation directory: {install_path}", "SUCCESS")
-        return install_path
-    except Exception as e:
-        log(f"Failed to create directory {install_path}: {e}", "ERROR")
-        return None
+cd "$INSTALL_DIR"
+echo "Stopping containers..."
+docker compose down
+echo "✅ Containers stopped"
 
-def clone_agixt_repository(install_path: str, github_token: Optional[str] = None) -> bool:
-    """Clone the AGiXT repository"""
-    try:
-        if github_token:
-            repo_url = f"https://{github_token}@github.com/Josh-XT/AGiXT.git"
-        else:
-            repo_url = "https://github.com/Josh-XT/AGiXT.git"
-        
-        log("Cloning AGiXT repository...")
-        result = subprocess.run(
-            ["git", "clone", repo_url, "."],
-            cwd=install_path,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result.returncode == 0:
-            log("AGiXT repository cloned successfully", "SUCCESS")
-            return True
-        else:
-            log(f"Failed to clone repository: {result.stderr}", "ERROR")
-            return False
-            
-    except Exception as e:
-        log(f"Error cloning repository: {e}", "ERROR")
-        return False
+# Step 4: Copy model to correct location
+echo ""
+echo "📋 Step 4: Copy Model to AGiXT Location"
+echo "---------------------------------------"
 
-def generate_secure_api_key() -> str:
-    """Generate a secure API key for AGiXT"""
-    return secrets.token_urlsafe(32)
+# Create model directory
+echo "Creating model directory..."
+mkdir -p "$TARGET_MODEL_DIR"
 
-def get_env_config() -> Dict[str, str]:
-    """Get the .env configuration for v1.1-proxy-fixed with EzLocalAI"""
-    api_key = generate_secure_api_key()
-    
-    return {
-        # Version info
-        'AGIXT_VERSION': VERSION,
-        'INSTALL_DATE': datetime.now().isoformat(),
-        
-        # Basic configuration - PROXY READY
-        'AGIXT_AUTO_UPDATE': 'true',
-        'AGIXT_API_KEY': api_key,  # FIXED: Generate secure API key
-        'UVICORN_WORKERS': '6',
-        'WORKING_DIRECTORY': './WORKSPACE',
-        'TZ': 'Europe/Paris',
-        
-        # PROXY URLs - Professional domains
-        'AGIXT_SERVER': 'https://agixt.locod-ai.com',
-        'AGIXT_URI': 'http://agixt:7437',
-        'APP_URI': 'https://agixtui.locod-ai.com',
-        'AUTH_WEB': 'https://agixtui.locod-ai.com/user',
-        
-        # Interface management - Complete setup
-        'APP_NAME': 'AGiXT Production Server v1.1-proxy-fixed',
-        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Manual Model Selection',
-        'AGIXT_AGENT': 'CodeAssistant',
-        'AGIXT_SHOW_SELECTION': 'agent,conversation',
-        'AGIXT_SHOW_AGENT_BAR': 'true',
-        'AGIXT_SHOW_APP_BAR': 'true',
-        'AGIXT_CONVERSATION_MODE': 'select',
-        'INTERACTIVE_MODE': 'chat',
-        'THEME_NAME': 'doom',
-        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy-fixed - Manual Model Selection',
-        
-        # Authentication & agents
-        'AUTH_PROVIDER': 'magicalauth',
-        'CREATE_AGENT_ON_REGISTER': 'true',
-        'CREATE_AGIXT_AGENT': 'true',
-        'ALLOW_EMAIL_SIGN_IN': 'true',
-        
-        # Advanced features
-        'AGIXT_FILE_UPLOAD_ENABLED': 'true',
-        'AGIXT_VOICE_INPUT_ENABLED': 'true',
-        'AGIXT_RLHF': 'true',
-        'AGIXT_ALLOW_MESSAGE_EDITING': 'true',
-        'AGIXT_ALLOW_MESSAGE_DELETION': 'true',
-        'AGIXT_SHOW_OVERRIDE_SWITCHES': 'tts,websearch,analyze-user-input',
-        
-        # System configuration
-        'DATABASE_TYPE': 'sqlite',
-        'DATABASE_NAME': 'models/agixt',
-        'LOG_LEVEL': 'INFO',
-        'LOG_FORMAT': '%(asctime)s | %(levelname)s | %(message)s',
-        'ALLOWED_DOMAINS': '*',
-        'AGIXT_BRANCH': 'stable',
-        'AGIXT_REQUIRE_API_KEY': 'false',  # Keep disabled for easier setup
-        
-        # GraphQL Support
-        'GRAPHIQL': 'true',
-        'ENABLE_GRAPHQL': 'true',
-        
-        # EzLocalAI Integration - MANUAL MODEL SELECTION
-        'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
-        'EZLOCALAI_API_KEY': 'agixt-automation-key',
-        'EZLOCALAI_MAX_TOKENS': '16384',
-        'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
-        'EZLOCALAI_TOP_P': '0.9',
-        'EZLOCALAI_VOICE': 'DukeNukem',
-        
-        # EzLocalAI Server Configuration - NO DEFAULT MODEL
-        'LLM_MAX_TOKENS': '16384',
-        'THREADS': '3',  # Leave 1 core for system
-        'GPU_LAYERS': '0',  # CPU only
-        'WHISPER_MODEL': 'base.en',
-        'IMG_ENABLED': 'false',  # Disable to save resources
-        'AUTO_UPDATE': 'true',
-        
-        # External services
-        'TEXTGEN_URI': 'http://text-generation-webui:5000',
-        'N8N_URI': 'http://n8n-prod:5678',  # Integration with existing n8n
-    }
+# Copy model file
+echo "Copying model file..."
+echo "From: $BACKUP_MODEL"
+echo "To: $TARGET_MODEL_FILE"
 
-def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
-    """Create the .env file with all configurations"""
-    env_file = os.path.join(install_path, ".env")
-    
-    try:
-        with open(env_file, 'w') as f:
-            f.write("# =============================================================================\n")
-            f.write(f"# AGiXT Server Configuration - {VERSION}\n")
-            f.write("# =============================================================================\n")
-            f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write("# Features: Nginx Proxy + EzLocalAI + Manual Model Selection + GraphQL\n")
-            f.write("# Domains: https://agixt.locod-ai.com + https://agixtui.locod-ai.com\n")
-            f.write("# Optimization: Code generation, n8n workflows, server automation\n")
-            f.write("# =============================================================================\n\n")
-            
-            # Group variables by category
-            categories = {
-                "VERSION & BASIC": ["AGIXT_VERSION", "INSTALL_DATE", "AGIXT_AUTO_UPDATE", "AGIXT_API_KEY", "UVICORN_WORKERS", "WORKING_DIRECTORY", "TZ"],
-                "PROXY URLS": ["AGIXT_SERVER", "AGIXT_URI", "APP_URI", "AUTH_WEB"],
-                "INTERFACE": ["APP_NAME", "APP_DESCRIPTION", "AGIXT_AGENT", "AGIXT_SHOW_SELECTION", "AGIXT_SHOW_AGENT_BAR", "AGIXT_SHOW_APP_BAR", "AGIXT_CONVERSATION_MODE", "INTERACTIVE_MODE", "THEME_NAME", "AGIXT_FOOTER_MESSAGE"],
-                "AUTHENTICATION": ["AUTH_PROVIDER", "CREATE_AGENT_ON_REGISTER", "CREATE_AGIXT_AGENT", "ALLOW_EMAIL_SIGN_IN"],
-                "FEATURES": ["AGIXT_FILE_UPLOAD_ENABLED", "AGIXT_VOICE_INPUT_ENABLED", "AGIXT_RLHF", "AGIXT_ALLOW_MESSAGE_EDITING", "AGIXT_ALLOW_MESSAGE_DELETION", "AGIXT_SHOW_OVERRIDE_SWITCHES"],
-                "SYSTEM": ["DATABASE_TYPE", "DATABASE_NAME", "LOG_LEVEL", "LOG_FORMAT", "ALLOWED_DOMAINS", "AGIXT_BRANCH", "AGIXT_REQUIRE_API_KEY"],
-                "GRAPHQL": ["GRAPHIQL", "ENABLE_GRAPHQL"],
-                "EZLOCALAI INTEGRATION": ["EZLOCALAI_API_URL", "EZLOCALAI_API_KEY", "EZLOCALAI_MAX_TOKENS", "EZLOCALAI_TEMPERATURE", "EZLOCALAI_TOP_P", "EZLOCALAI_VOICE"],
-                "EZLOCALAI SERVER": ["LLM_MAX_TOKENS", "THREADS", "GPU_LAYERS", "WHISPER_MODEL", "IMG_ENABLED", "AUTO_UPDATE"],
-                "EXTERNAL SERVICES": ["TEXTGEN_URI", "N8N_URI"]
-            }
-            
-            for category, keys in categories.items():
-                f.write(f"# {category}\n")
-                for key in keys:
-                    if key in config:
-                        f.write(f"{key}={config[key]}\n")
-                f.write("\n")
-            
-            f.write("# =============================================================================\n")
-            f.write("# CONFIGURATION NOTES v1.1-proxy-fixed\n")
-            f.write("# =============================================================================\n")
-            f.write("# 🔑 SECURITY:\n")
-            f.write("#    - Auto-generated secure API key for JWT authentication\n")
-            f.write("#    - API key requirement disabled for easier setup\n")
-            f.write("#\n")
-            f.write("# 🌐 PROXY SETUP:\n")
-            f.write("#    - Frontend: https://agixtui.locod-ai.com → http://agixtinteractive:3437\n")
-            f.write("#    - Backend: https://agixt.locod-ai.com → http://agixt:7437\n")
-            f.write("#    - EzLocalAI: Direct access at http://162.55.213.90:8091\n")
-            f.write("#\n")
-            f.write("# 🤖 EZLOCALAI - MANUAL MODEL SELECTION:\n")
-            f.write("#    - No default model (clean start)\n")
-            f.write("#    - Add models manually via EzLocalAI interface\n")
-            f.write("#    - Temperature: 0.3 (precise code generation)\n")
-            f.write("#    - Max Tokens: 16384 (long code blocks)\n")
-            f.write("#    - CPU Only: 3 threads (AMD EPYC optimized)\n")
-            f.write("#\n")
-            f.write("# 🔗 INTEGRATIONS:\n")
-            f.write("#    - n8n: Pre-configured for workflow automation\n")
-            f.write("#    - GraphQL: Full management interface\n")
-            f.write("#    - Docker Network: agixt-network for internal communication\n")
-            f.write("#\n")
-            f.write("# 🎯 NEXT STEPS:\n")
-            f.write("#    1. Access EzLocalAI at http://162.55.213.90:8091\n")
-            f.write("#    2. Add your preferred models manually\n")
-            f.write("#    3. Create agents using your selected models\n")
-            f.write("#    4. Configure nginx for proxy domains\n")
-            f.write("# =============================================================================\n")
-        
-        log(f"Created .env file with {len(config)} variables", "SUCCESS")
-        log(f"Generated secure API key: {config['AGIXT_API_KEY'][:8]}...", "INFO")
-        return True
-        
-    except Exception as e:
-        log(f"Failed to create .env file: {e}", "ERROR")
-        return False
+cp "$BACKUP_MODEL" "$TARGET_MODEL_FILE"
 
-def update_docker_compose(install_path: str) -> bool:
-    """Update docker-compose.yml for proxy setup and EzLocalAI"""
-    compose_file = os.path.join(install_path, "docker-compose.yml")
-    
-    if not os.path.exists(compose_file):
-        log(f"docker-compose.yml not found at {compose_file}", "ERROR")
-        return False
-    
-    try:
-        log("Updating docker-compose.yml for v1.1-proxy-fixed...")
-        
-        # Read original docker-compose.yml
-        with open(compose_file, 'r') as f:
-            content = f.read()
-        
-        # Backup original
-        backup_file = compose_file + f".backup-{VERSION}"
-        with open(backup_file, 'w') as f:
-            f.write(content)
-        log(f"Backup created: {backup_file}")
-        
-        # Create the enhanced docker-compose.yml
-        enhanced_compose = """
-networks:
-  agixt-network:
-    external: true
+if [[ -f "$TARGET_MODEL_FILE" ]]; then
+    TARGET_SIZE=$(du -h "$TARGET_MODEL_FILE" | cut -f1)
+    echo "✅ Model copied successfully"
+    echo "📦 Target size: $TARGET_SIZE"
+else
+    echo "❌ Model copy failed"
+    exit 1
+fi
 
-services:
-  # EzLocalAI - Manual Model Selection
-  ezlocalai:
-    image: joshxt/ezlocalai:main
-    container_name: ezlocalai
-    restart: unless-stopped
-    environment:
-      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
-      - THREADS=${THREADS}
-      - GPU_LAYERS=${GPU_LAYERS}
-      - WHISPER_MODEL=${WHISPER_MODEL}
-      - IMG_ENABLED=${IMG_ENABLED}
-      - AUTO_UPDATE=${AUTO_UPDATE}
-      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
-      - EZLOCALAI_URL=http://ezlocalai:8091
-    ports:
-      - "8091:8091"
-    volumes:
-      - ./ezlocalai:/app/models
-      - ./ezlocalai/voices:/app/voices
-    networks:
-      - agixt-network
+# Set proper permissions
+chown -R 1000:1000 "$INSTALL_DIR/ezlocalai" 2>/dev/null || true
+chmod -R 755 "$INSTALL_DIR/ezlocalai"
+echo "✅ Permissions set"
 
-  # AGiXT Backend API
-  agixt:
-    image: joshxt/agixt:main
-    container_name: agixt
-    restart: unless-stopped
-    depends_on:
-      - ezlocalai
-    environment:
-      # Version & Basic Configuration
-      - AGIXT_VERSION=${AGIXT_VERSION}
-      - INSTALL_DATE=${INSTALL_DATE}
-      - AGIXT_AUTO_UPDATE=${AGIXT_AUTO_UPDATE}
-      - AGIXT_API_KEY=${AGIXT_API_KEY}
-      - UVICORN_WORKERS=${UVICORN_WORKERS}
-      - WORKING_DIRECTORY=${WORKING_DIRECTORY}
-      - TZ=${TZ}
-      # URLs
-      - AGIXT_SERVER=${AGIXT_SERVER}
-      - AGIXT_URI=${AGIXT_URI}
-      # System Configuration
-      - DATABASE_TYPE=${DATABASE_TYPE}
-      - DATABASE_NAME=${DATABASE_NAME}
-      - LOG_LEVEL=${LOG_LEVEL}
-      - LOG_FORMAT=${LOG_FORMAT}
-      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS}
-      - AGIXT_BRANCH=${AGIXT_BRANCH}
-      - AGIXT_REQUIRE_API_KEY=${AGIXT_REQUIRE_API_KEY}
-      # GraphQL Support
-      - GRAPHIQL=${GRAPHIQL}
-      - ENABLE_GRAPHQL=${ENABLE_GRAPHQL}
-      # EzLocalAI Integration
-      - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
-      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
-      - EZLOCALAI_MAX_TOKENS=${EZLOCALAI_MAX_TOKENS}
-      - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
-      - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
-      - EZLOCALAI_VOICE=${EZLOCALAI_VOICE}
-      # External Services
-      - TEXTGEN_URI=${TEXTGEN_URI}
-      - N8N_URI=${N8N_URI}
-    ports:
-      - "7437:7437"
-    volumes:
-      - ./models:/agixt/models
-      - ./WORKSPACE:/agixt/WORKSPACE
-      - ./agixt:/agixt
-    networks:
-      - agixt-network
+# Step 5: Update .env file (only model variables)
+echo ""
+echo "🔧 Step 5: Update Model Configuration in .env"
+echo "----------------------------------------------"
 
-  # AGiXT Frontend Interface
-  agixtinteractive:
-    image: joshxt/agixt-interactive:main
-    container_name: agixtinteractive
-    restart: unless-stopped
-    depends_on:
-      - agixt
-    environment:
-      # Interface Configuration
-      - APP_NAME=${APP_NAME}
-      - APP_DESCRIPTION=${APP_DESCRIPTION}
-      - APP_URI=${APP_URI}
-      - AUTH_WEB=${AUTH_WEB}
-      - AGIXT_AGENT=${AGIXT_AGENT}
-      - AGIXT_SHOW_SELECTION=${AGIXT_SHOW_SELECTION}
-      - AGIXT_SHOW_AGENT_BAR=${AGIXT_SHOW_AGENT_BAR}
-      - AGIXT_SHOW_APP_BAR=${AGIXT_SHOW_APP_BAR}
-      - AGIXT_CONVERSATION_MODE=${AGIXT_CONVERSATION_MODE}
-      - INTERACTIVE_MODE=${INTERACTIVE_MODE}
-      - THEME_NAME=${THEME_NAME}
-      - AGIXT_FOOTER_MESSAGE=${AGIXT_FOOTER_MESSAGE}
-      # Authentication
-      - AUTH_PROVIDER=${AUTH_PROVIDER}
-      - CREATE_AGENT_ON_REGISTER=${CREATE_AGENT_ON_REGISTER}
-      - CREATE_AGIXT_AGENT=${CREATE_AGIXT_AGENT}
-      - ALLOW_EMAIL_SIGN_IN=${ALLOW_EMAIL_SIGN_IN}
-      # Features
-      - AGIXT_FILE_UPLOAD_ENABLED=${AGIXT_FILE_UPLOAD_ENABLED}
-      - AGIXT_VOICE_INPUT_ENABLED=${AGIXT_VOICE_INPUT_ENABLED}
-      - AGIXT_RLHF=${AGIXT_RLHF}
-      - AGIXT_ALLOW_MESSAGE_EDITING=${AGIXT_ALLOW_MESSAGE_EDITING}
-      - AGIXT_ALLOW_MESSAGE_DELETION=${AGIXT_ALLOW_MESSAGE_DELETION}
-      - AGIXT_SHOW_OVERRIDE_SWITCHES=${AGIXT_SHOW_OVERRIDE_SWITCHES}
-      # Backend Connection
-      - AGIXT_SERVER=${AGIXT_SERVER}
-      - AGIXT_URI=http://agixt:7437
-      - TZ=${TZ}
-    ports:
-      - "3437:3437"
-    volumes:
-      - ./WORKSPACE:/app/WORKSPACE
-    networks:
-      - agixt-network
-"""
-        
-        # Write the enhanced docker-compose.yml
-        with open(compose_file, 'w') as f:
-            f.write(enhanced_compose)
-        
-        log("docker-compose.yml updated for v1.1-proxy-fixed with manual EzLocalAI", "SUCCESS")
-        return True
-        
-    except Exception as e:
-        log(f"Failed to update docker-compose.yml: {e}", "ERROR")
-        return False
+ENV_FILE="$INSTALL_DIR/.env"
+ENV_BACKUP="$ENV_FILE.backup-$(date +%Y%m%d-%H%M%S)"
 
-def install_dependencies_and_start(install_path: str) -> bool:
-    """Install dependencies and start all services"""
-    try:
-        os.chdir(install_path)
-        
-        log("🚀 Starting AGiXT v1.1-proxy-fixed services...", "INFO")
-        log("📋 Configuration loaded from .env file", "INFO")
-        log("🤖 EzLocalAI will start without models (manual selection)", "INFO")
-        
-        log("🐳 Starting Docker Compose services...", "INFO")
-        result = subprocess.run(
-            ["docker", "compose", "up", "-d"],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result.returncode == 0:
-            log("✅ Docker Compose started successfully", "SUCCESS")
-            if result.stdout.strip():
-                log(f"📝 Output: {result.stdout.strip()}", "INFO")
-            
-            # Show service status
-            log("📊 Checking service status...", "INFO")
-            status_result = subprocess.run(
-                ["docker", "compose", "ps", "--format", "table"],
-                cwd=install_path,
-                capture_output=True,
-                text=True
-            )
-            if status_result.returncode == 0 and status_result.stdout.strip():
-                log("🐳 Container Status:", "INFO")
-                for line in status_result.stdout.strip().split('\n'):
-                    log(f"   {line}", "INFO")
-            
-            # Wait for services to start
-            log("⏱️  Waiting for services to initialize...", "INFO")
-            time.sleep(30)
-            
-            # Install GraphQL dependencies
-            log("🔧 Installing GraphQL dependencies...", "INFO")
-            graphql_success = install_graphql_dependencies(install_path)
-            
-            if graphql_success:
-                log("✅ GraphQL dependencies installed", "SUCCESS")
-                
-                # Restart AGiXT to load GraphQL
-                log("🔄 Restarting AGiXT to load GraphQL...", "INFO")
-                restart_result = subprocess.run(
-                    ["docker", "compose", "restart", "agixt"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                
-                if restart_result.returncode == 0:
-                    log("✅ AGiXT restarted successfully", "SUCCESS")
-                else:
-                    log(f"⚠️  AGiXT restart warning: {restart_result.stderr}", "WARN")
-            else:
-                log("⚠️  GraphQL dependencies installation had issues", "WARN")
-            
-            # Final status check
-            log("🔍 Final system status check...", "INFO")
-            time.sleep(15)  # Wait for services to stabilize
-            
-            final_status = subprocess.run(
-                ["docker", "compose", "ps"],
-                cwd=install_path,
-                capture_output=True,
-                text=True
-            )
-            
-            if final_status.returncode == 0:
-                log("📊 Final Service Status:", "INFO")
-                for line in final_status.stdout.strip().split('\n'):
-                    if line.strip():
-                        log(f"   {line}", "INFO")
-            
-            return True
-            
-        else:
-            log("❌ Failed to start Docker Compose services", "ERROR")
-            log(f"💥 Error: {result.stderr}", "ERROR")
-            if result.stdout.strip():
-                log(f"📝 Output: {result.stdout.strip()}", "ERROR")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        log("⏰ Docker Compose startup timeout", "ERROR")
-        log("🔍 Services may still be starting in background", "INFO")
-        return False
-    except Exception as e:
-        log(f"💥 Unexpected error during service startup: {e}", "ERROR")
-        return False
+# Backup .env file
+cp "$ENV_FILE" "$ENV_BACKUP"
+echo "📋 .env backed up to: $ENV_BACKUP"
 
-def install_graphql_dependencies(install_path: str) -> bool:
-    """Install GraphQL dependencies in AGiXT container"""
-    try:
-        log("Installing GraphQL dependencies...")
-        
-        # Wait for container to be ready
-        time.sleep(30)
-        
-        # Install strawberry-graphql
-        result = subprocess.run(
-            ["docker", "compose", "exec", "-T", "agixt", "pip", "install", "strawberry-graphql", "broadcaster"],
-            cwd=install_path,
-            capture_output=True,
-            text=True,
-            timeout=120
-        )
-        
-        if result.returncode == 0:
-            log("GraphQL dependencies installed successfully", "SUCCESS")
-        else:
-            log(f"Warning: Could not install GraphQL dependencies: {result.stderr}", "WARN")
-        
-        return True
-        
-    except Exception as e:
-        log(f"Could not install GraphQL dependencies: {e}", "WARN")
-        return False
+# Update specific model variables
+echo "Updating model variables..."
 
-def verify_installation(install_path: str):
-    """Verify the installation is working"""
-    log("Verifying installation...")
-    
-    try:
-        # Check container status
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "table"],
-            cwd=install_path,
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode == 0:
-            log("Container status:")
-            print(result.stdout)
-        
-        # Test endpoints
-        import socket
-        import urllib.request
-        import urllib.error
-        
-        endpoints = {
-            'AGiXT Frontend': 3437,
-            'AGiXT API': 7437,
-            'EzLocalAI': 8091
-        }
-        
-        for name, port in endpoints.items():
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            result = sock.connect_ex(('localhost', port))
-            if result == 0:
-                log(f"{name} (port {port}) is accessible", "SUCCESS")
-            else:
-                log(f"{name} (port {port}) is not accessible yet", "WARN")
-            sock.close()
-        
-        # Test GraphQL endpoint
-        try:
-            req = urllib.request.Request('http://localhost:7437/graphql')
-            try:
-                response = urllib.request.urlopen(req, timeout=5)
-                log("GraphQL endpoint is accessible", "SUCCESS")
-            except urllib.error.HTTPError as e:
-                if e.code == 405:
-                    log("GraphQL endpoint is accessible (GET method not allowed - normal)", "SUCCESS")
-                else:
-                    log(f"GraphQL endpoint returned HTTP {e.code}", "WARN")
-        except Exception as e:
-            log(f"GraphQL endpoint test failed: {e}", "WARN")
-            
-    except Exception as e:
-        log(f"Could not verify installation: {e}", "WARN")
+# Update DEFAULT_MODEL
+if grep -q "^DEFAULT_MODEL=" "$ENV_FILE"; then
+    sed -i "s|^DEFAULT_MODEL=.*|DEFAULT_MODEL=$MODEL_PATH_FOR_ENV|" "$ENV_FILE"
+    echo "✅ Updated DEFAULT_MODEL"
+else
+    echo "DEFAULT_MODEL=$MODEL_PATH_FOR_ENV" >> "$ENV_FILE"
+    echo "✅ Added DEFAULT_MODEL"
+fi
 
-def main():
-    """Main installation function"""
-    print("╔═══════════════════════════════════════════════════════════════╗")
-    print(f"║                 AGiXT Installer {VERSION}                  ║")
-    print("║     Nginx Proxy + EzLocalAI + Manual Models + GraphQL       ║")
-    print("╚═══════════════════════════════════════════════════════════════╝")
-    
-    # Parse command line arguments
-    config_name = "proxy"
-    github_token = None
-    skip_cleanup = False
-    
-    if len(sys.argv) > 1:
-        for i, arg in enumerate(sys.argv[1:], 1):
-            if arg == "--no-cleanup" or arg == "--skip-cleanup":
-                skip_cleanup = True
-                log("Cleanup disabled via command line flag", "INFO")
-            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
-                github_token = arg
-            elif not arg.startswith("-"):
-                config_name = arg
-    
-    log(f"Configuration: {config_name}")
-    log(f"Version: {VERSION}")
-    log(f"Target folder: /var/apps/{INSTALL_FOLDER_NAME}")
-    log(f"Cleanup previous installations: {'No' if skip_cleanup else 'Yes'}")
-    
-    # Installation steps
-    steps = [
-        ("Checking prerequisites", check_prerequisites),
-        ("Checking Docker network", check_docker_network),
-        ("Cleaning previous installations", lambda: cleanup_previous_installations() if not skip_cleanup else True),
-        ("Creating installation directory", lambda: create_installation_directory(config_name)),
-        ("Cloning AGiXT repository", None),  # Special handling
-        ("Creating configuration", None),     # Special handling
-        ("Updating Docker Compose", None),    # Special handling
-        ("Starting services", None),          # Special handling
-        ("Verifying installation", None)      # Special handling
-    ]
-    
-    install_path = None
-    
-    for i, (step_name, step_func) in enumerate(steps, 1):
-        # Skip cleanup step if disabled
-        if step_name == "Cleaning previous installations" and skip_cleanup:
-            log(f"Step {i}/{len(steps)}: {step_name}... SKIPPED")
-            continue
-            
-        log(f"Step {i}/{len(steps)}: {step_name}...")
-        
-        if step_func:
-            if step_name == "Creating installation directory":
-                install_path = step_func()
-                if not install_path:
-                    log("Installation failed", "ERROR")
-                    sys.exit(1)
-            else:
-                if not step_func():
-                    log(f"Step failed: {step_name}", "ERROR")
-                    sys.exit(1)
-        else:
-            # Handle special steps
-            if step_name == "Cloning AGiXT repository":
-                if not clone_agixt_repository(install_path, github_token):
-                    log("Installation failed", "ERROR")
-                    sys.exit(1)
-            elif step_name == "Creating configuration":
-                config = get_env_config()
-                if not create_env_file(install_path, config):
-                    log("Installation failed", "ERROR")
-                    sys.exit(1)
-            elif step_name == "Updating Docker Compose":
-                if not update_docker_compose(install_path):
-                    log("Installation failed", "ERROR")
-                    sys.exit(1)
-            elif step_name == "Starting services":
-                if not install_dependencies_and_start(install_path):
-                    log("Installation failed", "ERROR")
-                    sys.exit(1)
-            elif step_name == "Verifying installation":
-                verify_installation(install_path)
-    
-    # Success message
-    log("Installation completed successfully!", "SUCCESS")
-    print("\n" + "="*70)
-    print("🎉 AGiXT v1.1-proxy-fixed Installation Complete!")
-    print("="*70)
-    print(f"📁 Directory: {install_path}")
-    print(f"🌐 Frontend (via proxy): https://agixtui.locod-ai.com")
-    print(f"🔧 Backend API (via proxy): https://agixt.locod-ai.com")
-    print(f"🤖 EzLocalAI: http://162.55.213.90:8091")
-    print(f"🧬 GraphQL: https://agixt.locod-ai.com/graphql")
-    print()
-    print("🔗 Direct Access (for testing):")
-    print(f"   Frontend: http://162.55.213.90:3437")
-    print(f"   Backend: http://162.55.213.90:7437")
-    print()
-    print("📋 Management Commands:")
-    print(f"   Status: cd {install_path} && docker compose ps")
-    print(f"   Logs: cd {install_path} && docker compose logs -f")
-    print(f"   Stop: cd {install_path} && docker compose down")
-    print(f"   Restart: cd {install_path} && docker compose restart")
-    print()
-    print("🎯 Features Fixed:")
-    print("   ✅ Secure API key generation (JWT authentication)")
-    print("   ✅ No forced model downloads")
-    print("   ✅ Manual model selection via EzLocalAI")
-    print("   ✅ Nginx reverse proxy ready")
-    print("   ✅ GraphQL management interface")
-    print()
-    print("📝 Next Steps:")
-    print("   1. Access EzLocalAI: http://162.55.213.90:8091")
-    print("   2. Add your preferred models manually")
-    print("   3. Create agents using your selected models")
-    print("   4. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
-    print("   5. Test agent functionality with real models")
-    print()
-    print("🔑 Important:")
-    print("   - API Key has been auto-generated for security")
-    print("   - Check .env file for the generated API key")
-    print("   - Models must be added manually via EzLocalAI interface")
-    print("="*70)
+# Update EZLOCALAI_MODEL if it exists
+if grep -q "^EZLOCALAI_MODEL=" "$ENV_FILE"; then
+    sed -i "s|^EZLOCALAI_MODEL=.*|EZLOCALAI_MODEL=$MODEL_PATH_FOR_ENV|" "$ENV_FILE"
+    echo "✅ Updated EZLOCALAI_MODEL"
+fi
 
+echo "✅ Model configuration updated in .env"
 
-if __name__ == "__main__":
-    main()
+# Step 6: Update docker-compose.yml (only model environment)
+echo ""
+echo "🔧 Step 6: Update Docker Compose Model Environment"
+echo "---------------------------------------------------"
+
+COMPOSE_FILE="$INSTALL_DIR/docker-compose.yml"
+COMPOSE_BACKUP="$COMPOSE_FILE.backup-$(date +%Y%m%d-%H%M%S)"
+
+# Backup docker-compose.yml
+cp "$COMPOSE_FILE" "$COMPOSE_BACKUP"
+echo "📋 docker-compose.yml backed up to: $COMPOSE_BACKUP"
+
+# Update DEFAULT_MODEL in ezlocalai service environment
+if grep -A 20 "ezlocalai:" "$COMPOSE_FILE" | grep -q "DEFAULT_MODEL"; then
+    # Replace existing DEFAULT_MODEL line
+    sed -i "/ezlocalai:/,/^[[:space:]]*[a-zA-Z]/ s|DEFAULT_MODEL=.*|DEFAULT_MODEL=$MODEL_PATH_FOR_ENV|" "$COMPOSE_FILE"
+    echo "✅ Updated DEFAULT_MODEL in docker-compose.yml"
+else
+    # Add DEFAULT_MODEL to ezlocalai environment section
+    sed -i "/ezlocalai:/,/^[[:space:]]*[a-zA-Z]/ {
+        /environment:/a\
+      - DEFAULT_MODEL=$MODEL_PATH_FOR_ENV
+    }" "$COMPOSE_FILE"
+    echo "✅ Added DEFAULT_MODEL to docker-compose.yml"
+fi
+
+echo "✅ Docker compose configuration updated"
+
+# Step 7: Start containers
+echo ""
+echo "🚀 Step 7: Start Containers"
+echo "---------------------------"
+
+echo "Starting containers..."
+docker compose up -d
+
+echo "⏱️ Waiting for services to initialize..."
+sleep 30
+
+echo "✅ Containers started"
+
+# Step 8: Validation and Control Checks
+echo ""
+echo "🔍 Step 8: Validation and Control Checks"
+echo "========================================="
+
+echo ""
+echo "📋 Configuration Validation:"
+echo "----------------------------"
+
+# Check .env variables
+echo "🔍 Checking .env variables:"
+if grep -q "^DEFAULT_MODEL=$MODEL_PATH_FOR_ENV" "$ENV_FILE"; then
+    echo "  ✅ DEFAULT_MODEL correctly set to: $MODEL_PATH_FOR_ENV"
+else
+    echo "  ❌ DEFAULT_MODEL not set correctly"
+fi
+
+# Check model file exists
+echo ""
+echo "🔍 Checking model file:"
+if [[ -f "$TARGET_MODEL_FILE" ]]; then
+    FILE_SIZE=$(du -h "$TARGET_MODEL_FILE" | cut -f1)
+    echo "  ✅ Model file exists: $TARGET_MODEL_FILE"
+    echo "  📦 Size: $FILE_SIZE"
+else
+    echo "  ❌ Model file missing: $TARGET_MODEL_FILE"
+fi
+
+# Check container status
+echo ""
+echo "🔍 Checking container status:"
+CONTAINERS=$(docker compose ps --format "table {{.Name}}\t{{.Status}}")
+echo "$CONTAINERS"
+
+# Check if ezlocalai is running
+if docker compose ps | grep -q "ezlocalai.*Up"; then
+    echo "  ✅ EzLocalAI container is running"
+else
+    echo "  ❌ EzLocalAI container is not running"
+fi
+
+# Check ezlocalai logs for model loading
+echo ""
+echo "🔍 Checking EzLocalAI logs for model loading:"
+echo "----------------------------------------------"
+sleep 10  # Wait a bit more for logs
+LOGS=$(docker compose logs ezlocalai --tail 20 2>/dev/null || echo "Could not fetch logs")
+echo "$LOGS"
+
+if echo "$LOGS" | grep -q "Qwen2.5-Coder"; then
+    echo "  ✅ Model appears to be loading in logs"
+else
+    echo "  ⚠️  Model loading not clearly visible in logs yet"
+fi
+
+# Check API endpoints
+echo ""
+echo "🔍 Checking API endpoints:"
+echo "-------------------------"
+
+# Check EzLocalAI API
+if curl -s http://localhost:8091/health >/dev/null 2>&1; then
+    echo "  ✅ EzLocalAI API responding on port 8091"
+else
+    echo "  ⚠️  EzLocalAI API not responding yet on port 8091"
+fi
+
+# Check AGiXT API
+if curl -s http://localhost:7437 >/dev/null 2>&1; then
+    echo "  ✅ AGiXT API responding on port 7437"
+else
+    echo "  ⚠️  AGiXT API not responding yet on port 7437"
+fi
+
+# Final summary
+echo ""
+echo "📊 FINAL SUMMARY"
+echo "================"
+echo "🎯 Model Integration Status:"
+echo "  📦 Model file: $TARGET_MODEL_FILE"
+echo "  🔧 Configuration: $MODEL_PATH_FOR_ENV"
+echo "  📁 Installation: $INSTALL_DIR"
+echo ""
+echo "🔧 Next Steps:"
+echo "  1. Wait 2-3 minutes for full startup"
+echo "  2. Check EzLocalAI interface: http://162.55.213.90:8091"
+echo "  3. Verify model is loaded and selectable"
+echo "  4. Test chat functionality in AGiXT"
+echo ""
+echo "📋 Troubleshooting Commands:"
+echo "  cd $INSTALL_DIR"
+echo "  docker compose logs ezlocalai -f    # Watch EzLocalAI logs"
+echo "  docker compose logs agixt -f        # Watch AGiXT logs"
+echo "  docker compose restart ezlocalai    # Restart EzLocalAI only"
+echo ""
+echo "✅ Model integration completed!"
