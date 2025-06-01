@@ -60,7 +60,7 @@ MODEL_CONFIG = {
     "name": "Deepseek-Coder-1.3B-Instruct",
     "file": "Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
     "backup_path": "/var/backups/ezlocalai-models-20250601/Deepseek-Coder-1.3B-Instruct/Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
-    "download_url": "https://huggingface.co/Qwen/Deepseek-Coder-1.3B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+    "download_url": "https://huggingface.co/deepseek-ai/Deepseek-Coder-1.3B-Instruct-GGUF/resolve/main/Deepseek-Coder-1.3B-Instruct-Q4_K_M.gguf",
     "expected_size_gb": 1.0,
     "max_tokens": 32768,
     "hidden_size": 1536,
