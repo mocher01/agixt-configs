@@ -1,23 +1,24 @@
+
 #!/usr/bin/env python3
 """
-AGiXT Automated Installer - v1.1-proxy-no-local
-================================================
+AGiXT Automated Installer - v1.1-proxy-fixed
+=============================================
 
 Complete AGiXT installation with:
 ✅ Nginx reverse proxy integration (agixt.locod-ai.com / agixtui.locod-ai.com)
-✅ External AI provider ready (OpenAI, Anthropic, etc.)
-✅ Clean folder naming (/var/apps/agixt-v1.1-proxy-no-local)
+✅ EzLocalAI integration (manual model selection)
+✅ Clean folder naming (/var/apps/agixt-v1.1-proxy)
 ✅ Docker network integration
 ✅ GraphQL management interface
 ✅ Professional production setup
 
 Usage:
-  python3 install-agixt-no-local.py [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - [OPTIONS] [CONFIG_NAME] [GITHUB_TOKEN]
 
 Examples:
-  python3 install-agixt-no-local.py proxy
-  python3 install-agixt-no-local.py --no-cleanup proxy
-  python3 install-agixt-no-local.py proxy github_pat_xxx
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - --no-cleanup proxy
+  curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt-fixed.py | python3 - proxy github_pat_xxx
 
 Options:
   --no-cleanup, --skip-cleanup    Skip cleaning previous AGiXT installations
@@ -26,10 +27,10 @@ Arguments:
   CONFIG_NAME     Configuration name (default: proxy)
   GITHUB_TOKEN    GitHub token for private repos (optional)
 
-Features v1.1-proxy-no-local:
+Features v1.1-proxy-fixed:
 - 🌐 Nginx proxy: https://agixt.locod-ai.com + https://agixtui.locod-ai.com
-- 🤖 External AI providers: Ready for OpenAI, Anthropic, etc.
-- 📁 Clean naming: /var/apps/agixt-v1.1-proxy-no-local
+- 🤖 EzLocalAI: Ready for manual model selection
+- 📁 Clean naming: /var/apps/agixt-v1.1-proxy
 - 🔗 Docker networks: agixt-network integration
 - 🔑 Secure API key generation
 - 🎯 Optimized for: n8n workflows, server scripts, automation
@@ -46,7 +47,7 @@ from typing import Dict, Optional
 import json
 
 # Version info
-VERSION = "v1.1-proxy-no-local"
+VERSION = "v1.1-proxy-fixed"
 INSTALL_FOLDER_NAME = f"agixt-{VERSION}"
 
 def log(message: str, level: str = "INFO"):
@@ -233,7 +234,7 @@ def generate_secure_api_key() -> str:
     return secrets.token_urlsafe(32)
 
 def get_env_config() -> Dict[str, str]:
-    """Get the .env configuration for v1.1-proxy-no-local"""
+    """Get the .env configuration for v1.1-proxy-fixed with EzLocalAI"""
     api_key = generate_secure_api_key()
     
     return {
@@ -255,8 +256,8 @@ def get_env_config() -> Dict[str, str]:
         'AUTH_WEB': 'https://agixtui.locod-ai.com/user',
         
         # Interface management - Complete setup
-        'APP_NAME': 'AGiXT Production Server v1.1-proxy-no-local',
-        'APP_DESCRIPTION': 'AGiXT Production Server - External AI Provider Ready',
+        'APP_NAME': 'AGiXT Production Server v1.1-proxy-fixed',
+        'APP_DESCRIPTION': 'AGiXT Production Server with EzLocalAI & Manual Model Selection',
         'AGIXT_AGENT': 'CodeAssistant',
         'AGIXT_SHOW_SELECTION': 'agent,conversation',
         'AGIXT_SHOW_AGENT_BAR': 'true',
@@ -264,7 +265,7 @@ def get_env_config() -> Dict[str, str]:
         'AGIXT_CONVERSATION_MODE': 'select',
         'INTERACTIVE_MODE': 'chat',
         'THEME_NAME': 'doom',
-        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy-no-local - External Provider Ready',
+        'AGIXT_FOOTER_MESSAGE': 'AGiXT v1.1-proxy-fixed - Manual Model Selection',
         
         # Authentication & agents
         'AUTH_PROVIDER': 'magicalauth',
@@ -293,7 +294,24 @@ def get_env_config() -> Dict[str, str]:
         'GRAPHIQL': 'true',
         'ENABLE_GRAPHQL': 'true',
         
+        # EzLocalAI Integration - MANUAL MODEL SELECTION
+        'EZLOCALAI_API_URL': 'http://ezlocalai:8091',
+        'EZLOCALAI_API_KEY': 'agixt-automation-key',
+        'EZLOCALAI_MAX_TOKENS': '16384',
+        'EZLOCALAI_TEMPERATURE': '0.3',  # Lower for code generation
+        'EZLOCALAI_TOP_P': '0.9',
+        'EZLOCALAI_VOICE': 'DukeNukem',
+        
+        # EzLocalAI Server Configuration - NO DEFAULT MODEL
+        'LLM_MAX_TOKENS': '16384',
+        'THREADS': '3',  # Leave 1 core for system
+        'GPU_LAYERS': '0',  # CPU only
+        'WHISPER_MODEL': 'base.en',
+        'IMG_ENABLED': 'false',  # Disable to save resources
+        'AUTO_UPDATE': 'true',
+        
         # External services
+        'TEXTGEN_URI': 'http://text-generation-webui:5000',
         'N8N_URI': 'http://n8n-prod:5678',  # Integration with existing n8n
     }
 
@@ -307,7 +325,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write(f"# AGiXT Server Configuration - {VERSION}\n")
             f.write("# =============================================================================\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write("# Features: Nginx Proxy + External AI Providers + GraphQL\n")
+            f.write("# Features: Nginx Proxy + EzLocalAI + Manual Model Selection + GraphQL\n")
             f.write("# Domains: https://agixt.locod-ai.com + https://agixtui.locod-ai.com\n")
             f.write("# Optimization: Code generation, n8n workflows, server automation\n")
             f.write("# =============================================================================\n\n")
@@ -321,7 +339,9 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                 "FEATURES": ["AGIXT_FILE_UPLOAD_ENABLED", "AGIXT_VOICE_INPUT_ENABLED", "AGIXT_RLHF", "AGIXT_ALLOW_MESSAGE_EDITING", "AGIXT_ALLOW_MESSAGE_DELETION", "AGIXT_SHOW_OVERRIDE_SWITCHES"],
                 "SYSTEM": ["DATABASE_TYPE", "DATABASE_NAME", "LOG_LEVEL", "LOG_FORMAT", "ALLOWED_DOMAINS", "AGIXT_BRANCH", "AGIXT_REQUIRE_API_KEY"],
                 "GRAPHQL": ["GRAPHIQL", "ENABLE_GRAPHQL"],
-                "EXTERNAL SERVICES": ["N8N_URI"]
+                "EZLOCALAI INTEGRATION": ["EZLOCALAI_API_URL", "EZLOCALAI_API_KEY", "EZLOCALAI_MAX_TOKENS", "EZLOCALAI_TEMPERATURE", "EZLOCALAI_TOP_P", "EZLOCALAI_VOICE"],
+                "EZLOCALAI SERVER": ["LLM_MAX_TOKENS", "THREADS", "GPU_LAYERS", "WHISPER_MODEL", "IMG_ENABLED", "AUTO_UPDATE"],
+                "EXTERNAL SERVICES": ["TEXTGEN_URI", "N8N_URI"]
             }
             
             for category, keys in categories.items():
@@ -332,7 +352,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                 f.write("\n")
             
             f.write("# =============================================================================\n")
-            f.write("# CONFIGURATION NOTES v1.1-proxy-no-local\n")
+            f.write("# CONFIGURATION NOTES v1.1-proxy-fixed\n")
             f.write("# =============================================================================\n")
             f.write("# 🔑 SECURITY:\n")
             f.write("#    - Auto-generated secure API key for JWT authentication\n")
@@ -341,11 +361,14 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write("# 🌐 PROXY SETUP:\n")
             f.write("#    - Frontend: https://agixtui.locod-ai.com → http://agixtinteractive:3437\n")
             f.write("#    - Backend: https://agixt.locod-ai.com → http://agixt:7437\n")
+            f.write("#    - EzLocalAI: Direct access at http://162.55.213.90:8091\n")
             f.write("#\n")
-            f.write("# 🤖 AI PROVIDERS - EXTERNAL READY:\n")
-            f.write("#    - No local AI configured (clean start)\n")
-            f.write("#    - Ready for OpenAI, Anthropic, Hugging Face, etc.\n")
-            f.write("#    - Add provider configurations via AGiXT interface\n")
+            f.write("# 🤖 EZLOCALAI - MANUAL MODEL SELECTION:\n")
+            f.write("#    - No default model (clean start)\n")
+            f.write("#    - Add models manually via EzLocalAI interface\n")
+            f.write("#    - Temperature: 0.3 (precise code generation)\n")
+            f.write("#    - Max Tokens: 16384 (long code blocks)\n")
+            f.write("#    - CPU Only: 3 threads (AMD EPYC optimized)\n")
             f.write("#\n")
             f.write("# 🔗 INTEGRATIONS:\n")
             f.write("#    - n8n: Pre-configured for workflow automation\n")
@@ -353,9 +376,9 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             f.write("#    - Docker Network: agixt-network for internal communication\n")
             f.write("#\n")
             f.write("# 🎯 NEXT STEPS:\n")
-            f.write("#    1. Access AGiXT UI: https://agixtui.locod-ai.com (or http://162.55.213.90:3437)\n")
-            f.write("#    2. Add external AI provider (OpenAI, Anthropic, etc.)\n")
-            f.write("#    3. Create agents using your selected providers\n")
+            f.write("#    1. Access EzLocalAI at http://162.55.213.90:8091\n")
+            f.write("#    2. Add your preferred models manually\n")
+            f.write("#    3. Create agents using your selected models\n")
             f.write("#    4. Configure nginx for proxy domains\n")
             f.write("# =============================================================================\n")
         
@@ -368,7 +391,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
         return False
 
 def update_docker_compose(install_path: str) -> bool:
-    """Update docker-compose.yml for proxy setup without local AI"""
+    """Update docker-compose.yml for proxy setup and EzLocalAI"""
     compose_file = os.path.join(install_path, "docker-compose.yml")
     
     if not os.path.exists(compose_file):
@@ -376,7 +399,7 @@ def update_docker_compose(install_path: str) -> bool:
         return False
     
     try:
-        log("Updating docker-compose.yml for v1.1-proxy-no-local...")
+        log("Updating docker-compose.yml for v1.1-proxy-fixed...")
         
         # Read original docker-compose.yml
         with open(compose_file, 'r') as f:
@@ -395,11 +418,35 @@ networks:
     external: true
 
 services:
+  # EzLocalAI - Manual Model Selection
+  ezlocalai:
+    image: joshxt/ezlocalai:main
+    container_name: ezlocalai
+    restart: unless-stopped
+    environment:
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
+      - THREADS=${THREADS}
+      - GPU_LAYERS=${GPU_LAYERS}
+      - WHISPER_MODEL=${WHISPER_MODEL}
+      - IMG_ENABLED=${IMG_ENABLED}
+      - AUTO_UPDATE=${AUTO_UPDATE}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
+      - EZLOCALAI_URL=http://ezlocalai:8091
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./ezlocalai:/app/models
+      - ./ezlocalai/voices:/app/voices
+    networks:
+      - agixt-network
+
   # AGiXT Backend API
   agixt:
     image: joshxt/agixt:main
     container_name: agixt
     restart: unless-stopped
+    depends_on:
+      - ezlocalai
     environment:
       # Version & Basic Configuration
       - AGIXT_VERSION=${AGIXT_VERSION}
@@ -423,7 +470,15 @@ services:
       # GraphQL Support
       - GRAPHIQL=${GRAPHIQL}
       - ENABLE_GRAPHQL=${ENABLE_GRAPHQL}
+      # EzLocalAI Integration
+      - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
+      - EZLOCALAI_MAX_TOKENS=${EZLOCALAI_MAX_TOKENS}
+      - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
+      - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
+      - EZLOCALAI_VOICE=${EZLOCALAI_VOICE}
       # External Services
+      - TEXTGEN_URI=${TEXTGEN_URI}
       - N8N_URI=${N8N_URI}
     ports:
       - "7437:7437"
@@ -483,7 +538,7 @@ services:
         with open(compose_file, 'w') as f:
             f.write(enhanced_compose)
         
-        log("docker-compose.yml updated for v1.1-proxy-no-local (no local AI)", "SUCCESS")
+        log("docker-compose.yml updated for v1.1-proxy-fixed with manual EzLocalAI", "SUCCESS")
         return True
         
     except Exception as e:
@@ -495,9 +550,9 @@ def install_dependencies_and_start(install_path: str) -> bool:
     try:
         os.chdir(install_path)
         
-        log("🚀 Starting AGiXT v1.1-proxy-no-local services...", "INFO")
+        log("🚀 Starting AGiXT v1.1-proxy-fixed services...", "INFO")
         log("📋 Configuration loaded from .env file", "INFO")
-        log("🤖 No local AI configured - ready for external providers", "INFO")
+        log("🤖 EzLocalAI will start without models (manual selection)", "INFO")
         
         log("🐳 Starting Docker Compose services...", "INFO")
         result = subprocess.run(
@@ -638,7 +693,8 @@ def verify_installation(install_path: str):
         
         endpoints = {
             'AGiXT Frontend': 3437,
-            'AGiXT API': 7437
+            'AGiXT API': 7437,
+            'EzLocalAI': 8091
         }
         
         for name, port in endpoints.items():
@@ -672,7 +728,7 @@ def main():
     """Main installation function"""
     print("╔═══════════════════════════════════════════════════════════════╗")
     print(f"║                 AGiXT Installer {VERSION}                  ║")
-    print("║       Nginx Proxy + External AI Providers + GraphQL         ║")
+    print("║     Nginx Proxy + EzLocalAI + Manual Models + GraphQL       ║")
     print("╚═══════════════════════════════════════════════════════════════╝")
     
     # Parse command line arguments
@@ -753,11 +809,12 @@ def main():
     # Success message
     log("Installation completed successfully!", "SUCCESS")
     print("\n" + "="*70)
-    print("🎉 AGiXT v1.1-proxy-no-local Installation Complete!")
+    print("🎉 AGiXT v1.1-proxy-fixed Installation Complete!")
     print("="*70)
     print(f"📁 Directory: {install_path}")
     print(f"🌐 Frontend (via proxy): https://agixtui.locod-ai.com")
     print(f"🔧 Backend API (via proxy): https://agixt.locod-ai.com")
+    print(f"🤖 EzLocalAI: http://162.55.213.90:8091")
     print(f"🧬 GraphQL: https://agixt.locod-ai.com/graphql")
     print()
     print("🔗 Direct Access (for testing):")
@@ -770,24 +827,24 @@ def main():
     print(f"   Stop: cd {install_path} && docker compose down")
     print(f"   Restart: cd {install_path} && docker compose restart")
     print()
-    print("🎯 Features:")
+    print("🎯 Features Fixed:")
     print("   ✅ Secure API key generation (JWT authentication)")
-    print("   ✅ No local AI dependencies")
-    print("   ✅ External provider ready (OpenAI, Anthropic, etc.)")
+    print("   ✅ No forced model downloads")
+    print("   ✅ Manual model selection via EzLocalAI")
     print("   ✅ Nginx reverse proxy ready")
     print("   ✅ GraphQL management interface")
     print()
     print("📝 Next Steps:")
-    print("   1. Access AGiXT UI: http://162.55.213.90:3437")
-    print("   2. Add external AI provider (OpenAI, Anthropic, etc.)")
-    print("   3. Create agents using your selected providers")
+    print("   1. Access EzLocalAI: http://162.55.213.90:8091")
+    print("   2. Add your preferred models manually")
+    print("   3. Create agents using your selected models")
     print("   4. Enable nginx configs: agixt.locod-ai.com + agixtui.locod-ai.com")
-    print("   5. Test agent functionality")
+    print("   5. Test agent functionality with real models")
     print()
     print("🔑 Important:")
     print("   - API Key has been auto-generated for security")
     print("   - Check .env file for the generated API key")
-    print("   - No local AI configured - add external providers via UI")
+    print("   - Models must be added manually via EzLocalAI interface")
     print("="*70)
 
 
