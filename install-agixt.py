@@ -477,6 +477,63 @@ def copy_model_files(install_path: str) -> bool:
             
     except Exception as e:
         log(f"Error copying model files: {e}", "ERROR")
+        return False "ERROR")
+            return False
+        
+        # Get model size
+        model_size = os.path.getsize(backup_model_path) / (1024 * 1024 * 1024)  # GB
+        log(f"Found backup model: {model_size:.1f}GB", "INFO")
+        
+        # Create HuggingFace-style directory structure
+        os.makedirs(target_model_dir, exist_ok=True)
+        log(f"Created HuggingFace model directory: {target_model_dir}", "SUCCESS")
+        
+        # Copy model file
+        log("Copying model file... (this may take a moment)")
+        shutil.copy2(backup_model_path, target_model_path)
+        
+        # Create minimal HuggingFace config files
+        log("Creating HuggingFace config files...")
+        
+        # Create config.json
+        config_json = {
+            "architectures": ["Qwen2ForCausalLM"],
+            "model_type": "qwen2",
+            "quantization_config": {
+                "quant_method": "gguf",
+                "bits": 4
+            },
+            "torch_dtype": "float16"
+        }
+        
+        with open(os.path.join(target_model_dir, "config.json"), 'w') as f:
+            json.dump(config_json, f, indent=2)
+        
+        # Create tokenizer_config.json
+        tokenizer_config = {
+            "model_max_length": 16384,
+            "tokenizer_class": "Qwen2Tokenizer"
+        }
+        
+        with open(os.path.join(target_model_dir, "tokenizer_config.json"), 'w') as f:
+            json.dump(tokenizer_config, f, indent=2)
+        
+        # Verify copy and that it's a file, not directory
+        if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
+            target_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)  # GB
+            log(f"Model copied successfully: {target_size:.1f}GB", "SUCCESS")
+            
+            # Set proper permissions
+            os.chmod(target_model_path, 0o644)
+            log("Model permissions set", "SUCCESS")
+            log("HuggingFace config files created", "SUCCESS")
+            return True
+        else:
+            log("Model copy failed or created directory instead of file", "ERROR")
+            return False
+            
+    except Exception as e:
+        log(f"Error copying model files: {e}", "ERROR")
         return False
 
 def update_docker_compose(install_path: str) -> bool:
