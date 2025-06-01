@@ -136,8 +136,8 @@ def check_prerequisites() -> bool:
     
     return True
 
-def check_huggingface_token() -> Optional[str]:
-    """Check for HuggingFace token from environment or .env file"""
+def check_huggingface_token(github_token: Optional[str] = None) -> Optional[str]:
+    """Check for HuggingFace token from environment, local .env file, or GitHub repository"""
     
     # First, try to read from existing .env file in current directory
     env_file_paths = ['.env', 'agixt.env', 'config.env']
@@ -157,18 +157,63 @@ def check_huggingface_token() -> Optional[str]:
             except Exception as e:
                 log(f"Error reading {env_file}: {e}", "WARN")
     
-    # If not found in .env files, check environment variable
+    # If not found locally, try to fetch from GitHub repository
+    if github_token:
+        log("Attempting to fetch .env file from GitHub repository...", "INFO")
+        try:
+            env_urls = [
+                "https://raw.githubusercontent.com/mocher01/agixt-configs/main/.env",
+                "https://raw.githubusercontent.com/mocher01/agixt-configs/main/agixt.env",
+                "https://raw.githubusercontent.com/mocher01/agixt-configs/main/config.env"
+            ]
+            
+            for url in env_urls:
+                try:
+                    req = urllib.request.Request(url)
+                    req.add_header('Authorization', f'token {github_token}')
+                    
+                    with urllib.request.urlopen(req) as response:
+                        content = response.read().decode('utf-8')
+                        
+                        for line in content.split('\n'):
+                            line = line.strip()
+                            if line.startswith('HUGGINGFACE_TOKEN=') and not line.startswith('#'):
+                                token = line.split('=', 1)[1].strip()
+                                if token and token != 'your_token_here':
+                                    log(f"Found HuggingFace token in GitHub .env file: {token[:8]}...", "SUCCESS")
+                                    
+                                    # Save the .env file locally for future use
+                                    with open('.env', 'w') as f:
+                                        f.write(content)
+                                    log("Downloaded .env file from GitHub", "SUCCESS")
+                                    
+                                    return token
+                except urllib.error.HTTPError as e:
+                    if e.code == 404:
+                        continue  # Try next URL
+                    else:
+                        log(f"Error accessing {url}: HTTP {e.code}", "WARN")
+                except Exception as e:
+                    log(f"Error fetching from {url}: {e}", "WARN")
+                    
+        except Exception as e:
+            log(f"Error fetching .env from GitHub: {e}", "WARN")
+    
+    # If not found in GitHub, check environment variable
     token = os.getenv("HUGGINGFACE_TOKEN")
     
     if not token:
-        log("HUGGINGFACE_TOKEN not found in environment or .env files", "ERROR")
+        log("HUGGINGFACE_TOKEN not found in environment, local .env files, or GitHub repository", "ERROR")
         log("Please set your HuggingFace token in one of these ways:", "INFO")
         log("", "INFO")
         log("Option 1 - Environment variable:", "INFO")
         log("  export HUGGINGFACE_TOKEN=hf_your_token_here", "INFO")
         log("", "INFO")
-        log("Option 2 - Create .env file:", "INFO")
+        log("Option 2 - Create local .env file:", "INFO")
         log("  echo 'HUGGINGFACE_TOKEN=hf_your_token_here' > .env", "INFO")
+        log("", "INFO")
+        log("Option 3 - Add to your GitHub repository .env file:", "INFO")
+        log("  Add HUGGINGFACE_TOKEN=hf_your_token_here to your repo's .env file", "INFO")
         log("", "INFO")
         log("Get your token from: https://huggingface.co/settings/tokens", "INFO")
         return None
@@ -1161,7 +1206,7 @@ def main():
     print("╚═══════════════════════════════════════════════════════════════╝")
     
     # Check HuggingFace token first
-    hf_token = check_huggingface_token()
+    hf_token = check_huggingface_token(github_token)
     if not hf_token:
         log("Installation cannot proceed without HuggingFace token", "ERROR")
         sys.exit(1)
