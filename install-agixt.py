@@ -38,7 +38,7 @@ import json
 import urllib.request
 import urllib.error
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 def log(message: str, level: str = "INFO"):
     """Enhanced logging with timestamps"""
@@ -257,14 +257,59 @@ def check_huggingface_repo(repo: str, hf_token: str) -> bool:
         log(f"Error checking {repo}: {str(e)}", "DEBUG")
         return False
 
-def get_fallback_models() -> List[str]:
-    """Get list of known GGUF models as fallbacks"""
-    return [
-        "llama-2-7b-chat",
-        "mistral-7b-instruct-v0.1", 
-        "phi-2",
-        "codellama-7b-instruct"
-    ]
+def download_with_auth(url: str, target_path: str, token: str) -> bool:
+    """Download file with HuggingFace authentication"""
+    try:
+        log(f"Downloading: {url}")
+        log(f"Target: {target_path}")
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+        
+        # Create request with authentication
+        req = urllib.request.Request(url)
+        if token:  # Only add auth header if token exists
+            req.add_header('Authorization', f'Bearer {token}')
+        
+        # Download with authentication
+        with urllib.request.urlopen(req) as response:
+            total_size = int(response.headers.get('Content-Length', 0))
+            
+            with open(target_path, 'wb') as f:
+                downloaded = 0
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    
+                    if total_size > 0:
+                        percent = round(downloaded * 100 / total_size, 1)
+                        downloaded_mb = round(downloaded / (1024 * 1024), 1)
+                        total_mb = round(total_size / (1024 * 1024), 1)
+                        print(f"\r[{datetime.now().strftime('%H:%M:%S')}] INFO: Download progress: {percent}% ({downloaded_mb}/{total_mb} MB)", end='')
+        
+        print()  # New line after progress
+        
+        # Verify download
+        if os.path.exists(target_path):
+            actual_size_gb = os.path.getsize(target_path) / (1024 * 1024 * 1024)
+            log(f"Download completed: {actual_size_gb:.1f}GB", "SUCCESS")
+            return True
+        else:
+            log("Download failed - file not found", "ERROR")
+            return False
+            
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            log("Authentication failed - check your HuggingFace token", "ERROR")
+        else:
+            log(f"HTTP Error {e.code}: {e.reason}", "ERROR")
+        return False
+    except Exception as e:
+        log(f"Error downloading file: {e}", "ERROR")
+        return False
     """Download file with HuggingFace authentication"""
     try:
         log(f"Downloading: {url}")
@@ -585,3 +630,331 @@ def create_gguf_config_files(model_dir: str, model_name: str, model_info: Dict[s
         
     except Exception as e:
         log(f"Warning: Could not create config files: {e}", "WARN")
+
+def get_fallback_models() -> List[str]:
+    """Get list of known GGUF models as fallbacks"""
+    return [
+        "llama-2-7b-chat",
+        "mistral-7b-instruct-v0.1", 
+        "phi-2",
+        "codellama-7b-instruct"
+    ]
+
+def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
+    """Create the .env file using all configuration values"""
+    env_file = os.path.join(install_path, ".env")
+    
+    try:
+        # Generate API key if needed
+        api_key = config.get('AGIXT_API_KEY')
+        if not api_key or api_key == 'YOUR_GENERATED_API_KEY_HERE':
+            api_key = generate_secure_api_key()
+            log("Generated new secure API key", "SUCCESS")
+        
+        # Get version and model info from config
+        version = config.get('AGIXT_VERSION', 'unknown')
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
+        
+        with open(env_file, 'w') as f:
+            f.write("# =============================================================================\n")
+            f.write(f"# AGiXT Server Configuration - {version}\n")
+            f.write("# =============================================================================\n")
+            f.write(f"# Generated: {datetime.now().isoformat()}\n")
+            f.write(f"# Model: {model_name}\n")
+            f.write("# =============================================================================\n\n")
+            
+            # Write all config variables
+            for key, value in config.items():
+                if key == 'AGIXT_API_KEY':
+                    f.write(f"{key}={api_key}\n")
+                elif key == 'INSTALL_DATE':
+                    f.write(f"{key}={datetime.now().isoformat()}\n")
+                else:
+                    f.write(f"{key}={value}\n")
+        
+        log(f"Created .env file from configuration", "SUCCESS")
+        log(f"Generated secure API key: {api_key[:8]}...", "INFO")
+        return True
+        
+    except Exception as e:
+        log(f"Failed to create .env file: {e}", "ERROR")
+        return False
+
+def update_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
+    """Update docker-compose.yml using configuration values"""
+    compose_file = os.path.join(install_path, "docker-compose.yml")
+    
+    if not os.path.exists(compose_file):
+        log(f"docker-compose.yml not found at {compose_file}", "ERROR")
+        return False
+    
+    try:
+        version = config.get('AGIXT_VERSION', 'unknown')
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
+        
+        log(f"Updating docker-compose.yml for {version}...")
+        
+        # Read original docker-compose.yml
+        with open(compose_file, 'r') as f:
+            content = f.read()
+        
+        # Backup original
+        backup_file = compose_file + f".backup-{version}"
+        with open(backup_file, 'w') as f:
+            f.write(content)
+        log(f"Backup created: {backup_file}")
+        
+        # Create the enhanced docker-compose.yml
+        enhanced_compose = f"""
+networks:
+  agixt-network:
+    external: true
+
+services:
+  # EzLocalAI - {model_name} (GGUF)
+  ezlocalai:
+    image: joshxt/ezlocalai:main
+    container_name: ezlocalai
+    restart: unless-stopped
+    environment:
+      - DEFAULT_MODEL={model_name}
+      - THREADS=4
+      - GPU_LAYERS=0
+      - EZLOCALAI_API_KEY=agixt-automation-key
+      - EZLOCALAI_URL=http://ezlocalai:8091
+      - HUGGINGFACE_TOKEN=${{HUGGINGFACE_TOKEN}}
+    ports:
+      - "8091:8091"  # API endpoint
+      - "8502:8502"  # Streamlit web interface
+    volumes:
+      - ./ezlocalai:/app/models
+    networks:
+      - agixt-network
+
+  # AGiXT Backend API
+  agixt:
+    image: joshxt/agixt:main
+    container_name: agixt
+    restart: unless-stopped
+    depends_on:
+      - ezlocalai
+    environment:
+      - AGIXT_VERSION=${{AGIXT_VERSION}}
+      - AGIXT_API_KEY=${{AGIXT_API_KEY}}
+      - AGIXT_URI=http://agixt:7437
+      - EZLOCALAI_API_URL=http://ezlocalai:8091
+      - EZLOCALAI_API_KEY=agixt-automation-key
+      - EZLOCALAI_MODEL={model_name}
+      - HUGGINGFACE_TOKEN=${{HUGGINGFACE_TOKEN}}
+    ports:
+      - "7437:7437"
+    volumes:
+      - ./models:/agixt/models
+      - ./WORKSPACE:/agixt/WORKSPACE
+      - ./agixt:/agixt
+    networks:
+      - agixt-network
+
+  # AGiXT Frontend Interface
+  agixtinteractive:
+    image: joshxt/agixt-interactive:main
+    container_name: agixtinteractive
+    restart: unless-stopped
+    depends_on:
+      - agixt
+    environment:
+      - AGIXT_URI=http://agixt:7437
+      - APP_NAME=${{APP_NAME}}
+      - APP_DESCRIPTION=${{APP_DESCRIPTION}}
+    ports:
+      - "3437:3437"
+    volumes:
+      - ./WORKSPACE:/app/WORKSPACE
+    networks:
+      - agixt-network
+"""
+        
+        # Write the enhanced docker-compose.yml
+        with open(compose_file, 'w') as f:
+            f.write(enhanced_compose)
+        
+        log(f"docker-compose.yml updated for {version} with {model_name} model", "SUCCESS")
+        return True
+        
+    except Exception as e:
+        log(f"Failed to update docker-compose.yml: {e}", "ERROR")
+        return False
+
+def install_dependencies_and_start(install_path: str, config: Dict[str, str]) -> bool:
+    """Install dependencies and start all services"""
+    try:
+        os.chdir(install_path)
+        
+        version = config.get('AGIXT_VERSION', 'unknown')
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
+        
+        log(f"🚀 Starting AGiXT {version} services...", "INFO")
+        log(f"🤖 EzLocalAI will start with {model_name} model", "INFO")
+        
+        log("🐳 Starting Docker Compose services...", "INFO")
+        result = subprocess.run(
+            ["docker", "compose", "up", "-d"],
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        
+        if result.returncode == 0:
+            log("✅ Docker Compose started successfully", "SUCCESS")
+            return True
+        else:
+            log("❌ Failed to start Docker Compose services", "ERROR")
+            log(f"💥 Error: {result.stderr}", "ERROR")
+            return False
+            
+    except Exception as e:
+        log(f"💥 Unexpected error during service startup: {e}", "ERROR")
+        return False
+
+def verify_installation(install_path: str, config: Dict[str, str]):
+    """Verify the installation is working"""
+    log("Verifying installation...")
+    
+    try:
+        # Check container status
+        result = subprocess.run(
+            ["docker", "compose", "ps"],
+            cwd=install_path,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            log("Container status:")
+            print(result.stdout)
+        
+    except Exception as e:
+        log(f"Could not verify installation: {e}", "WARN")
+
+def main():
+    """Main installation function"""
+    
+    # Parse command line arguments
+    config_name = "proxy"
+    github_token = None
+    skip_cleanup = False
+    
+    if len(sys.argv) > 1:
+        for i, arg in enumerate(sys.argv[1:], 1):
+            if arg == "--no-cleanup" or arg == "--skip-cleanup":
+                skip_cleanup = True
+                log("Cleanup disabled via command line flag", "INFO")
+            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
+                github_token = arg
+            elif not arg.startswith("-"):
+                config_name = arg
+    
+    # Load configuration first
+    if github_token:
+        config = load_config_from_github(github_token)
+    else:
+        log("GitHub token required for configuration download", "ERROR")
+        log("Usage: script.py proxy github_token", "ERROR")
+        sys.exit(1)
+    
+    if not config:
+        log("Attempting fallback to local configuration files...", "INFO")
+        config = load_config_fallback()
+        if not config:
+            log("No configuration found. Cannot proceed.", "ERROR")
+            sys.exit(1)
+    
+    # Display configuration info
+    version = config.get('AGIXT_VERSION', 'unknown')
+    model_name = config.get('MODEL_NAME', 'Unknown-Model')
+    install_base = config.get('INSTALL_BASE_PATH', '/var/apps')
+    folder_prefix = config.get('INSTALL_FOLDER_PREFIX', 'agixt')
+    
+    print("╔═══════════════════════════════════════════════════════════════╗")
+    print(f"║                 AGiXT Installer {version}                  ║")
+    print(f"║              GGUF-Only Model Installation                   ║")
+    print(f"║                    Model: {model_name:<25}            ║")
+    print("╚═══════════════════════════════════════════════════════════════╝")
+    
+    log(f"Configuration: {config_name}")
+    log(f"Version: {version}")
+    log(f"Model: {model_name}")
+    log(f"Target folder: {install_base}/{folder_prefix}-{version}")
+    log(f"HuggingFace token: {config.get('HUGGINGFACE_TOKEN', 'NOT SET')[:8]}...")
+    log(f"Cleanup previous installations: {'No' if skip_cleanup else 'Yes'}")
+    
+    # Installation steps
+    steps = [
+        ("Checking prerequisites", check_prerequisites),
+        ("Checking Docker network", check_docker_network),
+        ("Cleaning previous installations", lambda: cleanup_previous_installations(config) if not skip_cleanup else True),
+        ("Creating installation directory", lambda: create_installation_directory(config)),
+        ("Cloning AGiXT repository", None),  # Special handling
+        ("Setting up GGUF model files", None),     # Special handling
+        ("Creating configuration", None),     # Special handling
+        ("Updating Docker Compose", None),    # Special handling
+        ("Starting services", None),          # Special handling
+        ("Verifying installation", None),     # Special handling
+    ]
+    
+    install_path = None
+    
+    for i, (step_name, step_func) in enumerate(steps, 1):
+        # Skip cleanup step if disabled
+        if step_name == "Cleaning previous installations" and skip_cleanup:
+            log(f"Step {i}/{len(steps)}: {step_name}... SKIPPED")
+            continue
+            
+        log(f"Step {i}/{len(steps)}: {step_name}...")
+        
+        if step_func:
+            if step_name == "Creating installation directory":
+                install_path = step_func()
+                if not install_path:
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            else:
+                if not step_func():
+                    log(f"Step failed: {step_name}", "ERROR")
+                    sys.exit(1)
+        else:
+            # Handle special steps
+            if step_name == "Cloning AGiXT repository":
+                if not clone_agixt_repository(install_path, github_token):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Setting up GGUF model files":
+                if not copy_or_download_model_files(install_path, config):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Creating configuration":
+                if not create_env_file(install_path, config):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Updating Docker Compose":
+                if not update_docker_compose(install_path, config):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Starting services":
+                if not install_dependencies_and_start(install_path, config):
+                    log("Installation failed", "ERROR")
+                    sys.exit(1)
+            elif step_name == "Verifying installation":
+                verify_installation(install_path, config)
+    
+    # Success message
+    log("Installation completed successfully!", "SUCCESS")
+    print(f"\n🎉 AGiXT {version} Installation Complete!")
+    print(f"📁 Directory: {install_path}")
+    print(f"🤖 Model: {config.get('MODEL_NAME', 'Unknown')} (GGUF)")
+    print(f"🔗 Frontend: http://localhost:3437")
+    print(f"🔧 Backend: http://localhost:7437")
+    print(f"🎮 EzLocalAI: http://localhost:8091")
+
+if __name__ == "__main__":
+    main()
