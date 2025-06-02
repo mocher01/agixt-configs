@@ -252,6 +252,8 @@ def main():
             log("❌ installer_utils.py required but not available", "ERROR")
             sys.exit(1)
         
+        log("✅ Essential modules available - proceeding with installation")
+        
         # Add temp directory to Python path
         sys.path.insert(0, temp_dir)
         
@@ -273,11 +275,12 @@ def main():
                 
         except ImportError as e:
             log("❌ Failed to import installer modules: " + str(e), "ERROR")
-            log("ℹ️  This is expected - modules will be created next")
             sys.exit(1)
         except Exception as e:
             log("❌ Installation error: " + str(e), "ERROR")
             sys.exit(1)
+        
+        log("✅ Essential modules available - proceeding with installation")
     
     finally:
         # Clean up temporary directory
