@@ -46,26 +46,33 @@ def log(message: str, level: str = "INFO"):
     print(f"[{timestamp}] {level}: {message}")
 
 def load_config_from_github(github_token: str) -> Dict[str, str]:
-    """Load configuration from GitHub agixt.config file"""
+    """Load configuration from GitHub agixt.config file using Contents API"""
     config = {}
     
     log("Loading configuration from GitHub repository...", "INFO")
     try:
-        config_urls = [
-            "https://raw.githubusercontent.com/mocher01/agixt-configs/main/agixt.config",
-            "https://raw.githubusercontent.com/mocher01/agixt-configs/main/.env",
-            "https://raw.githubusercontent.com/mocher01/agixt-configs/main/config.env"
+        # Use GitHub Contents API instead of raw URLs
+        config_files = [
+            "agixt.config",
+            ".env",
+            "config.env"
         ]
         
-        for url in config_urls:
+        for config_file in config_files:
             try:
-                req = urllib.request.Request(url)
+                # Use GitHub Contents API URL
+                api_url = f"https://api.github.com/repos/mocher01/agixt-configs/contents/{config_file}"
+                
+                req = urllib.request.Request(api_url)
                 req.add_header('Authorization', f'token {github_token}')
+                req.add_header('Accept', 'application/vnd.github.v3.raw')
+                
+                log(f"Trying to fetch {config_file} from GitHub API...", "INFO")
                 
                 with urllib.request.urlopen(req) as response:
                     content = response.read().decode('utf-8')
                     
-                    log(f"Successfully downloaded config from: {url}", "SUCCESS")
+                    log(f"Successfully downloaded config from: {config_file}", "SUCCESS")
                     
                     # Parse the config file
                     for line_num, line in enumerate(content.split('\n'), 1):
@@ -113,11 +120,12 @@ def load_config_from_github(github_token: str) -> Dict[str, str]:
                     
             except urllib.error.HTTPError as e:
                 if e.code == 404:
-                    continue  # Try next URL
+                    log(f"{config_file} not found in repository", "INFO")
+                    continue  # Try next file
                 else:
-                    log(f"Error accessing {url}: HTTP {e.code}", "WARN")
+                    log(f"Error accessing {config_file}: HTTP {e.code}", "WARN")
             except Exception as e:
-                log(f"Error fetching from {url}: {e}", "WARN")
+                log(f"Error fetching {config_file}: {e}", "WARN")
         
         log("Could not find configuration file in GitHub repository", "ERROR")
         return {}
