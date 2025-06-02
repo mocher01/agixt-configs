@@ -13,7 +13,6 @@ Complete AGiXT installation with configuration-driven approach:
 ✅ EzLocalAI web interface exposed
 ✅ Docker network integration
 ✅ GraphQL management interface
-✅ GGUF model focus with automatic fallbacks
 
 Usage:
   curl -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy github_token
@@ -22,8 +21,7 @@ The script will automatically:
 1. Download agixt.config from your GitHub repository
 2. Parse ALL configuration variables from the config file
 3. Use those variables for the complete installation
-4. Prioritize GGUF models and fallback if needed
-5. No hardcoded values in the script
+4. No hardcoded values in the script
 
 Arguments:
   CONFIG_NAME     Configuration name (default: proxy)
@@ -40,96 +38,12 @@ import json
 import urllib.request
 import urllib.error
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 
 def log(message: str, level: str = "INFO"):
     """Enhanced logging with timestamps"""
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {level}: {message}")
-
-def get_model_config(model_name: str, hf_token: str) -> Tuple[str, Dict]:
-    """Get GGUF model configuration with fallbacks"""
-    log(f"Looking for GGUF version of {model_name}...", "INFO")
-    
-    # Priority repositories for GGUF models
-    gguf_repos = [
-        f"TheBloke/{model_name.replace('/', '-')}-GGUF",
-        f"microsoft/{model_name.split('/')[-1]}-gguf",
-        f"bartowski/{model_name.split('/')[-1]}-GGUF",
-        f"TheBloke/{model_name.split('/')[-1]}-GGUF"
-    ]
-    
-    # Fallback GGUF models if original not found
-    fallback_models = [
-        "TheBloke/Llama-2-7B-Chat-GGUF",
-        "TheBloke/Mistral-7B-Instruct-v0.1-GGUF", 
-        "microsoft/phi-2-gguf",
-        "TheBloke/CodeLlama-7B-Instruct-GGUF"
-    ]
-    
-    all_repos = gguf_repos + fallback_models
-    
-    for repo in all_repos:
-        try:
-            log(f"Checking repository: {repo}", "INFO")
-            
-            # Use correct HuggingFace API endpoint
-            api_url = f"https://huggingface.co/api/models/{repo}"
-            
-            req = urllib.request.Request(api_url)
-            req.add_header('Authorization', f'Bearer {hf_token}')
-            
-            with urllib.request.urlopen(req, timeout=10) as response:
-                if response.getcode() == 200:
-                    repo_info = json.loads(response.read().decode())
-                    
-                    # Check files in the repo
-                    files_url = f"https://huggingface.co/api/models/{repo}/tree/main"
-                    files_req = urllib.request.Request(files_url)
-                    files_req.add_header('Authorization', f'Bearer {hf_token}')
-                    
-                    with urllib.request.urlopen(files_req, timeout=10) as files_response:
-                        files_data = json.loads(files_response.read().decode())
-                        
-                        # Look for GGUF files
-                        gguf_files = [f for f in files_data if f['path'].endswith('.gguf')]
-                        
-                        if gguf_files:
-                            # Prefer Q4_K_M or Q5_K_M for good quality/size balance
-                            preferred_file = None
-                            for file in gguf_files:
-                                if 'q4_k_m' in file['path'].lower():
-                                    preferred_file = file
-                                    break
-                                elif 'q5_k_m' in file['path'].lower():
-                                    preferred_file = file
-                                    break
-                            
-                            if not preferred_file:
-                                preferred_file = gguf_files[0]  # Take first available
-                            
-                            config = {
-                                'model_repo': repo,
-                                'model_file': preferred_file['path'],
-                                'model_url': f"https://huggingface.co/{repo}/resolve/main/{preferred_file['path']}",
-                                'model_size_gb': preferred_file.get('size', 0) / (1024**3),
-                                'is_fallback': repo in fallback_models
-                            }
-                            
-                            if config['is_fallback']:
-                                log(f"✅ Found fallback GGUF model: {repo}/{preferred_file['path']}", "SUCCESS")
-                            else:
-                                log(f"✅ Found GGUF version: {repo}/{preferred_file['path']}", "SUCCESS")
-                            
-                            log(f"Model size: {config['model_size_gb']:.1f}GB", "INFO")
-                            return repo.split('/')[-1], config
-                            
-        except Exception as e:
-            log(f"Could not access {repo}: {e}", "WARN")
-            continue
-    
-    log("❌ No GGUF models found, installation cannot continue", "ERROR")
-    return None, {}
 
 def load_config_from_github(github_token: str) -> Dict[str, str]:
     """Load configuration from GitHub agixt.config file using Contents API"""
@@ -189,7 +103,7 @@ def load_config_from_github(github_token: str) -> Dict[str, str]:
                     
                     # Validate required keys
                     required_keys = [
-                        'AGIXT_VERSION', 'MODEL_NAME', 'HUGGINGFACE_TOKEN',
+                        'AGIXT_VERSION', 'MODEL_NAME', 'MODEL_HF_NAME', 'HUGGINGFACE_TOKEN',
                         'INSTALL_FOLDER_PREFIX', 'INSTALL_BASE_PATH'
                     ]
                     
@@ -484,35 +398,33 @@ def generate_secure_api_key() -> str:
     return secrets.token_urlsafe(32)
 
 def copy_or_download_model_files(install_path: str, config: Dict[str, str]) -> bool:
-    """Copy model files from backup location or download GGUF with HF authentication"""
+    """Copy model files from backup location or download with HF authentication"""
     
     # Get all values from config
     model_name = config.get('MODEL_NAME', 'Unknown-Model')
+    model_file = config.get('MODEL_FILE', 'model.safetensors')
     backup_path = config.get('MODEL_BACKUP_PATH', '')
     hf_token = config.get('HUGGINGFACE_TOKEN', '')
     
+    # URLs from config
+    download_url = config.get('MODEL_DOWNLOAD_URL', '')
+    config_url = config.get('MODEL_CONFIG_URL', '')
+    tokenizer_url = config.get('MODEL_TOKENIZER_URL', '')
+    tokenizer_config_url = config.get('MODEL_TOKENIZER_CONFIG_URL', '')
+    
+    # Create model directory
+    target_model_dir = os.path.join(install_path, "ezlocalai", model_name)
+    target_model_path = os.path.join(target_model_dir, model_file)
+    
     try:
-        log(f"Setting up {model_name} model (GGUF focus)...")
-        
-        # Get GGUF model configuration
-        final_model_name, model_config = get_model_config(model_name, hf_token)
-        
-        if not model_config:
-            log("No suitable GGUF model found - installation cannot continue", "ERROR")
-            return False
-        
-        if model_config.get('is_fallback'):
-            log(f"Using fallback model: {final_model_name}", "WARN")
-        
-        # Create model directory
-        target_model_dir = os.path.join(install_path, "ezlocalai", final_model_name)
-        target_model_path = os.path.join(target_model_dir, model_config['model_file'])
+        log(f"Setting up {model_name} model...")
+        log(f"Model file: {model_file}")
         
         # Create HuggingFace-style directory structure
         os.makedirs(target_model_dir, exist_ok=True)
         log(f"Created model directory: {target_model_dir}", "SUCCESS")
         
-        # Check if backup model exists (original model path)
+        # Check if backup model exists
         if backup_path and os.path.exists(backup_path):
             log(f"Found backup model at {backup_path}", "SUCCESS")
             
@@ -534,13 +446,21 @@ def copy_or_download_model_files(install_path: str, config: Dict[str, str]) -> b
         else:
             if backup_path:
                 log(f"Backup model not found at {backup_path}", "WARN")
-            log("Downloading GGUF model from HuggingFace with authentication...", "INFO")
+            log("Downloading model from HuggingFace with authentication...", "INFO")
             
-            # Download GGUF model with authentication
-            if not download_with_auth(model_config['model_url'], target_model_path, hf_token):
-                log(f"Failed to download {model_config['model_file']}", "ERROR")
-                return False
-            log(f"Downloaded {model_config['model_file']} successfully", "SUCCESS")
+            # Download model files with authentication
+            files_to_download = [
+                (download_url, target_model_path),
+                (config_url, os.path.join(target_model_dir, "config.json")),
+                (tokenizer_url, os.path.join(target_model_dir, "tokenizer.json")),
+                (tokenizer_config_url, os.path.join(target_model_dir, "tokenizer_config.json"))
+            ]
+            
+            for url, path in files_to_download:
+                if url and not download_with_auth(url, path, hf_token):
+                    log(f"Failed to download {os.path.basename(path)}", "ERROR")
+                    return False
+                log(f"Downloaded {os.path.basename(path)} successfully", "SUCCESS")
         
         # Create HuggingFace config files using config values
         log("Creating/updating HuggingFace config files...")
@@ -549,23 +469,23 @@ def copy_or_download_model_files(install_path: str, config: Dict[str, str]) -> b
         config_json_path = os.path.join(target_model_dir, "config.json")
         if not os.path.exists(config_json_path):
             model_config_json = {
-                "architectures": ["LlamaForCausalLM"],
+                "architectures": ["DeepseekForCausalLM"],
                 "attention_dropout": 0.0,
-                "bos_token_id": 1,
-                "eos_token_id": 2,
+                "bos_token_id": 100000,
+                "eos_token_id": 100001,
                 "hidden_act": "silu",
-                "hidden_size": int(config.get('MODEL_HIDDEN_SIZE', 4096)),
+                "hidden_size": int(config.get('MODEL_HIDDEN_SIZE', 2048)),
                 "initializer_range": 0.02,
-                "intermediate_size": int(config.get('MODEL_INTERMEDIATE_SIZE', 11008)),
-                "max_position_embeddings": int(config.get('EZLOCALAI_MAX_TOKENS', 4096)),
-                "model_type": "llama",
-                "num_attention_heads": int(config.get('MODEL_NUM_HEADS', 32)),
-                "num_hidden_layers": int(config.get('MODEL_NUM_LAYERS', 32)),
-                "num_key_value_heads": int(config.get('MODEL_NUM_KV_HEADS', 32)),
+                "intermediate_size": 5504,
+                "max_position_embeddings": int(config.get('EZLOCALAI_MAX_TOKENS', 8192)),
+                "model_type": "deepseek",
+                "num_attention_heads": int(config.get('MODEL_NUM_HEADS', 16)),
+                "num_hidden_layers": int(config.get('MODEL_NUM_LAYERS', 24)),
+                "num_key_value_heads": int(config.get('MODEL_NUM_KV_HEADS', 16)),
                 "rms_norm_eps": 1e-06,
                 "rope_theta": 10000.0,
                 "tie_word_embeddings": False,
-                "torch_dtype": "float16",
+                "torch_dtype": "bfloat16",
                 "transformers_version": "4.37.0",
                 "use_cache": True,
                 "vocab_size": int(config.get('MODEL_VOCAB_SIZE', 32000))
@@ -579,9 +499,13 @@ def copy_or_download_model_files(install_path: str, config: Dict[str, str]) -> b
         tokenizer_config_path = os.path.join(target_model_dir, "tokenizer_config.json")
         if not os.path.exists(tokenizer_config_path):
             tokenizer_config = {
-                "bos_token": "<s>",
-                "eos_token": "</s>",
-                "model_max_length": int(config.get('EZLOCALAI_MAX_TOKENS', 4096)),
+                "added_tokens_decoder": {
+                    "100000": {"content": "<｜begin▁of▁sentence｜>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True},
+                    "100001": {"content": "<｜end▁of▁sentence｜>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True}
+                },
+                "bos_token": "<｜begin▁of▁sentence｜>",
+                "eos_token": "<｜end▁of▁sentence｜>",
+                "model_max_length": int(config.get('EZLOCALAI_MAX_TOKENS', 8192)),
                 "tokenizer_class": "LlamaTokenizer"
             }
             
@@ -594,19 +518,13 @@ def copy_or_download_model_files(install_path: str, config: Dict[str, str]) -> b
             os.chmod(target_model_path, 0o644)
             log("Model permissions set", "SUCCESS")
         
-        # Update config with final model info
-        config['FINAL_MODEL_NAME'] = final_model_name
-        config['FINAL_MODEL_FILE'] = model_config['model_file']
-        config['DEFAULT_MODEL'] = final_model_name
-        config['EZLOCALAI_MODEL'] = final_model_name
-        
         # Final verification
         if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
             final_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)
-            log(f"✅ {final_model_name} model setup complete: {final_size:.1f}GB", "SUCCESS")
+            log(f"✅ {model_name} model setup complete: {final_size:.1f}GB", "SUCCESS")
             return True
         else:
-            log(f"❌ {final_model_name} model setup failed", "ERROR")
+            log(f"❌ {model_name} model setup failed", "ERROR")
             return False
             
     except Exception as e:
@@ -624,14 +542,14 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
         
         # Get version and model info from config
         version = config.get('AGIXT_VERSION', 'unknown')
-        model_name = config.get('FINAL_MODEL_NAME', config.get('MODEL_NAME', 'Unknown-Model'))
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
         
         with open(env_file, 'w') as f:
             f.write("# =============================================================================\n")
             f.write(f"# AGiXT Server Configuration - {version}\n")
             f.write("# =============================================================================\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write(f"# Model: {model_name} (GGUF)\n")
+            f.write(f"# Model: {model_name}\n")
             f.write("# =============================================================================\n\n")
             
             # Group variables by category (using config values)
@@ -656,8 +574,6 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
                         f.write(f"{key}={api_key}\n")
                     elif key == "INSTALL_DATE":
                         f.write(f"{key}={datetime.now().isoformat()}\n")
-                    elif key == "DEFAULT_MODEL" or key == "EZLOCALAI_MODEL":
-                        f.write(f"{key}={config.get('FINAL_MODEL_NAME', config.get(key, ''))}\n")
                     elif key in config:
                         f.write(f"{key}={config[key]}\n")
                 f.write("\n")
@@ -680,7 +596,7 @@ def update_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
     
     try:
         version = config.get('AGIXT_VERSION', 'unknown')
-        model_name = config.get('FINAL_MODEL_NAME', config.get('MODEL_NAME', 'Unknown-Model'))
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
         
         log(f"Updating docker-compose.yml for {version}...")
         
@@ -695,28 +611,28 @@ def update_docker_compose(install_path: str, config: Dict[str, str]) -> bool:
         log(f"Backup created: {backup_file}")
         
         # Create the enhanced docker-compose.yml
-        enhanced_compose = f"""
+        enhanced_compose = """
 networks:
   agixt-network:
     external: true
 
 services:
-  # EzLocalAI - {model_name} (GGUF)
+  # EzLocalAI - """ + model_name + """ (Lightweight)
   ezlocalai:
     image: joshxt/ezlocalai:main
     container_name: ezlocalai
     restart: unless-stopped
     environment:
-      - DEFAULT_MODEL=${{DEFAULT_MODEL}}
-      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS}}
-      - THREADS=${{THREADS}}
-      - GPU_LAYERS=${{GPU_LAYERS}}
-      - WHISPER_MODEL=${{WHISPER_MODEL}}
-      - IMG_ENABLED=${{IMG_ENABLED}}
-      - AUTO_UPDATE=${{AUTO_UPDATE}}
-      - EZLOCALAI_API_KEY=${{EZLOCALAI_API_KEY}}
+      - DEFAULT_MODEL=${DEFAULT_MODEL}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS}
+      - THREADS=${THREADS}
+      - GPU_LAYERS=${GPU_LAYERS}
+      - WHISPER_MODEL=${WHISPER_MODEL}
+      - IMG_ENABLED=${IMG_ENABLED}
+      - AUTO_UPDATE=${AUTO_UPDATE}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
       - EZLOCALAI_URL=http://ezlocalai:8091
-      - HUGGINGFACE_TOKEN=${{HUGGINGFACE_TOKEN}}
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
     ports:
       - "8091:8091"  # API endpoint
       - "8502:8502"  # Streamlit web interface
@@ -735,40 +651,40 @@ services:
       - ezlocalai
     environment:
       # Version & Basic Configuration
-      - AGIXT_VERSION=${{AGIXT_VERSION}}
-      - INSTALL_DATE=${{INSTALL_DATE}}
-      - AGIXT_AUTO_UPDATE=${{AGIXT_AUTO_UPDATE}}
-      - AGIXT_API_KEY=${{AGIXT_API_KEY}}
-      - UVICORN_WORKERS=${{UVICORN_WORKERS}}
-      - WORKING_DIRECTORY=${{WORKING_DIRECTORY}}
-      - TZ=${{TZ}}
+      - AGIXT_VERSION=${AGIXT_VERSION}
+      - INSTALL_DATE=${INSTALL_DATE}
+      - AGIXT_AUTO_UPDATE=${AGIXT_AUTO_UPDATE}
+      - AGIXT_API_KEY=${AGIXT_API_KEY}
+      - UVICORN_WORKERS=${UVICORN_WORKERS}
+      - WORKING_DIRECTORY=${WORKING_DIRECTORY}
+      - TZ=${TZ}
       # URLs
-      - AGIXT_SERVER=${{AGIXT_SERVER}}
-      - AGIXT_URI=${{AGIXT_URI}}
+      - AGIXT_SERVER=${AGIXT_SERVER}
+      - AGIXT_URI=${AGIXT_URI}
       # System Configuration
-      - DATABASE_TYPE=${{DATABASE_TYPE}}
-      - DATABASE_NAME=${{DATABASE_NAME}}
-      - LOG_LEVEL=${{LOG_LEVEL}}
-      - LOG_FORMAT=${{LOG_FORMAT}}
-      - ALLOWED_DOMAINS=${{ALLOWED_DOMAINS}}
-      - AGIXT_BRANCH=${{AGIXT_BRANCH}}
-      - AGIXT_REQUIRE_API_KEY=${{AGIXT_REQUIRE_API_KEY}}
+      - DATABASE_TYPE=${DATABASE_TYPE}
+      - DATABASE_NAME=${DATABASE_NAME}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FORMAT=${LOG_FORMAT}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS}
+      - AGIXT_BRANCH=${AGIXT_BRANCH}
+      - AGIXT_REQUIRE_API_KEY=${AGIXT_REQUIRE_API_KEY}
       # GraphQL Support
-      - GRAPHIQL=${{GRAPHIQL}}
-      - ENABLE_GRAPHQL=${{ENABLE_GRAPHQL}}
+      - GRAPHIQL=${GRAPHIQL}
+      - ENABLE_GRAPHQL=${ENABLE_GRAPHQL}
       # HuggingFace Integration
-      - HUGGINGFACE_TOKEN=${{HUGGINGFACE_TOKEN}}
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN}
       # EzLocalAI Integration
-      - EZLOCALAI_API_URL=${{EZLOCALAI_API_URL}}
-      - EZLOCALAI_API_KEY=${{EZLOCALAI_API_KEY}}
-      - EZLOCALAI_MODEL=${{EZLOCALAI_MODEL}}
-      - EZLOCALAI_MAX_TOKENS=${{EZLOCALAI_MAX_TOKENS}}
-      - EZLOCALAI_TEMPERATURE=${{EZLOCALAI_TEMPERATURE}}
-      - EZLOCALAI_TOP_P=${{EZLOCALAI_TOP_P}}
-      - EZLOCALAI_VOICE=${{EZLOCALAI_VOICE}}
+      - EZLOCALAI_API_URL=${EZLOCALAI_API_URL}
+      - EZLOCALAI_API_KEY=${EZLOCALAI_API_KEY}
+      - EZLOCALAI_MODEL=${EZLOCALAI_MODEL}
+      - EZLOCALAI_MAX_TOKENS=${EZLOCALAI_MAX_TOKENS}
+      - EZLOCALAI_TEMPERATURE=${EZLOCALAI_TEMPERATURE}
+      - EZLOCALAI_TOP_P=${EZLOCALAI_TOP_P}
+      - EZLOCALAI_VOICE=${EZLOCALAI_VOICE}
       # External Services
-      - TEXTGEN_URI=${{TEXTGEN_URI}}
-      - N8N_URI=${{N8N_URI}}
+      - TEXTGEN_URI=${TEXTGEN_URI}
+      - N8N_URI=${N8N_URI}
     ports:
       - "7437:7437"
     volumes:
@@ -787,34 +703,34 @@ services:
       - agixt
     environment:
       # Interface Configuration
-      - APP_NAME=${{APP_NAME}}
-      - APP_DESCRIPTION=${{APP_DESCRIPTION}}
-      - APP_URI=${{APP_URI}}
-      - AUTH_WEB=${{AUTH_WEB}}
-      - AGIXT_AGENT=${{AGIXT_AGENT}}
-      - AGIXT_SHOW_SELECTION=${{AGIXT_SHOW_SELECTION}}
-      - AGIXT_SHOW_AGENT_BAR=${{AGIXT_SHOW_AGENT_BAR}}
-      - AGIXT_SHOW_APP_BAR=${{AGIXT_SHOW_APP_BAR}}
-      - AGIXT_CONVERSATION_MODE=${{AGIXT_CONVERSATION_MODE}}
-      - INTERACTIVE_MODE=${{INTERACTIVE_MODE}}
-      - THEME_NAME=${{THEME_NAME}}
-      - AGIXT_FOOTER_MESSAGE=${{AGIXT_FOOTER_MESSAGE}}
+      - APP_NAME=${APP_NAME}
+      - APP_DESCRIPTION=${APP_DESCRIPTION}
+      - APP_URI=${APP_URI}
+      - AUTH_WEB=${AUTH_WEB}
+      - AGIXT_AGENT=${AGIXT_AGENT}
+      - AGIXT_SHOW_SELECTION=${AGIXT_SHOW_SELECTION}
+      - AGIXT_SHOW_AGENT_BAR=${AGIXT_SHOW_AGENT_BAR}
+      - AGIXT_SHOW_APP_BAR=${AGIXT_SHOW_APP_BAR}
+      - AGIXT_CONVERSATION_MODE=${AGIXT_CONVERSATION_MODE}
+      - INTERACTIVE_MODE=${INTERACTIVE_MODE}
+      - THEME_NAME=${THEME_NAME}
+      - AGIXT_FOOTER_MESSAGE=${AGIXT_FOOTER_MESSAGE}
       # Authentication
-      - AUTH_PROVIDER=${{AUTH_PROVIDER}}
-      - CREATE_AGENT_ON_REGISTER=${{CREATE_AGENT_ON_REGISTER}}
-      - CREATE_AGIXT_AGENT=${{CREATE_AGIXT_AGENT}}
-      - ALLOW_EMAIL_SIGN_IN=${{ALLOW_EMAIL_SIGN_IN}}
+      - AUTH_PROVIDER=${AUTH_PROVIDER}
+      - CREATE_AGENT_ON_REGISTER=${CREATE_AGENT_ON_REGISTER}
+      - CREATE_AGIXT_AGENT=${CREATE_AGIXT_AGENT}
+      - ALLOW_EMAIL_SIGN_IN=${ALLOW_EMAIL_SIGN_IN}
       # Features
-      - AGIXT_FILE_UPLOAD_ENABLED=${{AGIXT_FILE_UPLOAD_ENABLED}}
-      - AGIXT_VOICE_INPUT_ENABLED=${{AGIXT_VOICE_INPUT_ENABLED}}
-      - AGIXT_RLHF=${{AGIXT_RLHF}}
-      - AGIXT_ALLOW_MESSAGE_EDITING=${{AGIXT_ALLOW_MESSAGE_EDITING}}
-      - AGIXT_ALLOW_MESSAGE_DELETION=${{AGIXT_ALLOW_MESSAGE_DELETION}}
-      - AGIXT_SHOW_OVERRIDE_SWITCHES=${{AGIXT_SHOW_OVERRIDE_SWITCHES}}
+      - AGIXT_FILE_UPLOAD_ENABLED=${AGIXT_FILE_UPLOAD_ENABLED}
+      - AGIXT_VOICE_INPUT_ENABLED=${AGIXT_VOICE_INPUT_ENABLED}
+      - AGIXT_RLHF=${AGIXT_RLHF}
+      - AGIXT_ALLOW_MESSAGE_EDITING=${AGIXT_ALLOW_MESSAGE_EDITING}
+      - AGIXT_ALLOW_MESSAGE_DELETION=${AGIXT_ALLOW_MESSAGE_DELETION}
+      - AGIXT_SHOW_OVERRIDE_SWITCHES=${AGIXT_SHOW_OVERRIDE_SWITCHES}
       # Backend Connection
-      - AGIXT_SERVER=${{AGIXT_SERVER}}
+      - AGIXT_SERVER=${AGIXT_SERVER}
       - AGIXT_URI=http://agixt:7437
-      - TZ=${{TZ}}
+      - TZ=${TZ}
     ports:
       - "3437:3437"
     volumes:
@@ -842,11 +758,11 @@ def install_dependencies_and_start(install_path: str, config: Dict[str, str]) ->
         os.chdir(install_path)
         
         version = config.get('AGIXT_VERSION', 'unknown')
-        model_name = config.get('FINAL_MODEL_NAME', config.get('MODEL_NAME', 'Unknown-Model'))
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
         
         log(f"🚀 Starting AGiXT {version} services...", "INFO")
         log("📋 Configuration loaded from agixt.config file", "INFO")
-        log(f"🤖 EzLocalAI will start with {model_name} model (GGUF)", "INFO")
+        log(f"🤖 EzLocalAI will start with {model_name} model", "INFO")
         log("🔑 HuggingFace authentication configured", "INFO")
         
         log("🐳 Starting Docker Compose services...", "INFO")
@@ -968,19 +884,19 @@ def validate_ezlocalai_configuration(install_path: str, config: Dict[str, str]) 
     """Comprehensive validation of EzLocalAI configuration"""
     try:
         version = config.get('AGIXT_VERSION', 'unknown')
-        model_name = config.get('FINAL_MODEL_NAME', config.get('MODEL_NAME', 'Unknown-Model'))
+        model_name = config.get('MODEL_NAME', 'Unknown-Model')
         
-        log(f"🔍 Validating EzLocalAI Configuration with {model_name} (GGUF)", "INFO")
+        log(f"🔍 Validating EzLocalAI Configuration with {model_name}", "INFO")
         log("=" * 50, "INFO")
         
         # Check model file exists
-        model_file = config.get('FINAL_MODEL_FILE', config.get('MODEL_FILE', 'model.gguf'))
+        model_file = config.get('MODEL_FILE', 'model.safetensors')
         model_file_path = os.path.join(install_path, "ezlocalai", model_name, model_file)
         if os.path.exists(model_file_path):
-            model_size = os.path.getsize(model_file_path) / (1024 * 1024 * 1024)
-            log(f"✅ GGUF model file exists: {model_size:.1f}GB", "SUCCESS")
+            model_size = os.path.getsize(model_file_path) / (1024 * 1024 * 1024)  # GB
+            log(f"✅ Model file exists: {model_size:.1f}GB", "SUCCESS")
         else:
-            log(f"❌ GGUF model file missing: {model_file_path}", "ERROR")
+            log(f"❌ Model file missing: {model_file_path}", "ERROR")
             return False
         
         # Check HuggingFace config files
@@ -1006,8 +922,8 @@ def validate_ezlocalai_configuration(install_path: str, config: Dict[str, str]) 
             
             # Check critical variables from config
             required_vars = {
-                'DEFAULT_MODEL': config.get('FINAL_MODEL_NAME', ''),
-                'EZLOCALAI_MODEL': config.get('FINAL_MODEL_NAME', ''),
+                'DEFAULT_MODEL': config.get('DEFAULT_MODEL', ''),
+                'EZLOCALAI_MODEL': config.get('EZLOCALAI_MODEL', ''),
                 'EZLOCALAI_API_URL': config.get('EZLOCALAI_API_URL', ''),
                 'EZLOCALAI_API_KEY': config.get('EZLOCALAI_API_KEY', ''),
                 'EZLOCALAI_MAX_TOKENS': config.get('EZLOCALAI_MAX_TOKENS', ''),
@@ -1079,7 +995,7 @@ def validate_ezlocalai_configuration(install_path: str, config: Dict[str, str]) 
         log("=" * 50, "INFO")
         log("🎯 Model Integration Status:", "INFO")
         log(f"  📦 Model File: {model_file_path}", "INFO")
-        log(f"  🔧 Configuration: {model_name} (GGUF)", "INFO")
+        log(f"  🔧 Configuration: {model_name}", "INFO")
         log(f"  📁 Installation: {install_path}", "INFO")
         log(f"  🔑 HuggingFace Auth: Configured", "INFO")
         log("", "INFO")
@@ -1194,7 +1110,7 @@ def main():
     
     log(f"Configuration: {config_name}")
     log(f"Version: {version}")
-    log(f"Model: {model_name} (GGUF focus)")
+    log(f"Model: {model_name}")
     log(f"Target folder: {install_base}/{folder_prefix}-{version}")
     log(f"HuggingFace token: {config.get('HUGGINGFACE_TOKEN', 'NOT SET')[:8]}...")
     log(f"Cleanup previous installations: {'No' if skip_cleanup else 'Yes'}")
@@ -1206,7 +1122,7 @@ def main():
         ("Cleaning previous installations", lambda: cleanup_previous_installations(config) if not skip_cleanup else True),
         ("Creating installation directory", lambda: create_installation_directory(config)),
         ("Cloning AGiXT repository", None),  # Special handling
-        ("Setting up GGUF model files", None),     # Special handling
+        ("Setting up model files", None),     # Special handling
         ("Creating configuration", None),     # Special handling
         ("Updating Docker Compose", None),    # Special handling
         ("Starting services", None),          # Special handling
@@ -1240,7 +1156,7 @@ def main():
                 if not clone_agixt_repository(install_path, github_token):
                     log("Installation failed", "ERROR")
                     sys.exit(1)
-            elif step_name == "Setting up GGUF model files":
+            elif step_name == "Setting up model files":
                 if not copy_or_download_model_files(install_path, config):
                     log("Installation failed", "ERROR")
                     sys.exit(1)
@@ -1262,7 +1178,6 @@ def main():
                 validate_ezlocalai_configuration(install_path, config)
     
     # Success message using config values
-    final_model_name = config.get('FINAL_MODEL_NAME', config.get('MODEL_NAME', 'Unknown-Model'))
     log("Installation completed successfully!", "SUCCESS")
     print("\n" + "="*70)
     print(f"🎉 AGiXT {version} Installation Complete!")
@@ -1286,8 +1201,7 @@ def main():
     print()
     print("🎯 Features Implemented:")
     print("   ✅ Configuration-driven installation (no hardcoded values)")
-    print(f"   ✅ {final_model_name} model (GGUF optimized)")
-    print("   ✅ GGUF model auto-discovery with fallbacks")
+    print(f"   ✅ {model_name} model")
     print("   ✅ HuggingFace authenticated downloads")
     print("   ✅ Auto-download with token authentication")
     print("   ✅ EzLocalAI web interface exposed (port 8502)")
@@ -1299,19 +1213,18 @@ def main():
     print("📝 Next Steps:")
     print("   1. Access AGiXT Frontend: http://162.55.213.90:3437")
     print("   2. Access EzLocalAI UI: http://162.55.213.90:8502")
-    print(f"   3. Create agents using {final_model_name} model")
+    print(f"   3. Create agents using {model_name} model")
     print("   4. Test chat functionality")
     print(f"   5. Enable nginx configs: {config.get('AGIXT_SERVER', '')} + {config.get('APP_URI', '')}")
     print("   6. Monitor logs for any issues")
     print()
     print("🔑 Important:")
     print("   - All configuration loaded from agixt.config")
-    print(f"   - {final_model_name} model ready with GGUF format")
-    print("   - Model auto-discovered with HF authentication")
+    print(f"   - {model_name} model ready with HuggingFace structure")
+    print("   - Model downloaded/copied with HF authentication")
     print("   - EzLocalAI web interface available for model management")
     print(f"   - HuggingFace token configured: {config.get('HUGGINGFACE_TOKEN', 'NOT SET')[:8]}...")
     print("   - No hardcoded values - fully configuration-driven")
-    print("   - GGUF format for optimal performance and compatibility")
     print("="*70)
 
 
