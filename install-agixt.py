@@ -63,8 +63,12 @@ def search_huggingface_models(query: str, hf_token: str, limit: int = 20) -> Lis
         headers = {'Authorization': f'Bearer {hf_token}'} if hf_token else {}
         headers['User-Agent'] = 'AGiXT-Installer/1.5'
         
+        # Properly encode the search query for URL
+        import urllib.parse
+        encoded_query = urllib.parse.quote(query)
+        
         # Search for models with the query term
-        search_url = f"https://huggingface.co/api/models?search={query}&limit={limit}&sort=downloads&direction=-1"
+        search_url = f"https://huggingface.co/api/models?search={encoded_query}&limit={limit}&sort=downloads&direction=-1"
         
         log(f"🔍 Searching HuggingFace for: {query}", "DEBUG")
         req = urllib.request.Request(search_url, headers=headers)
@@ -91,7 +95,7 @@ def search_huggingface_models(query: str, hf_token: str, limit: int = 20) -> Lis
             return available_models
             
     except Exception as e:
-        log(f"❌ Error searching HuggingFace: {str(e)}", "ERROR")
+        log(f"❌ Error searching HuggingFace: {str(e)}", "DEBUG")
         return []
 
 
@@ -223,7 +227,8 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
         **get_default_settings()
     }
     
-    # 1. Search for the exact model
+    # 1. Search for the exact model name (simple search first)
+    log(f"🔍 Searching for exact model: {model_name}", "DEBUG")
     search_results = search_huggingface_models(model_name, hf_token, limit=10)
     
     for model in search_results:
@@ -247,41 +252,63 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
                     "architecture": model['architecture']
                 }
     
-    # 2. Search for GGUF variants
-    gguf_search_terms = [
-        f"{model_name} GGUF",
-        f"TheBloke/{model_name}",
-        model_name.replace('-', ' ') + " GGUF"
+    # 2. Try known GGUF repositories (specific searches)
+    possible_gguf_repos = [
+        f"TheBloke/{model_name}-GGUF",
+        f"TheBloke/{model_name.replace('_', '-')}-GGUF"
     ]
     
-    for search_term in gguf_search_terms:
-        log(f"🔍 Searching for GGUF variant: {search_term}", "DEBUG")
-        gguf_results = search_huggingface_models(search_term, hf_token, limit=5)
-        
-        for model in gguf_results:
-            if 'gguf' in model['id'].lower() and model_name.replace('-', '').lower() in model['id'].replace('-', '').lower():
-                log(f"✅ Found GGUF variant: {model['id']}", "INFO")
-                
-                best_file = find_best_model_file(model['repo'], hf_token)
-                if best_file:
-                    return {
-                        **default_config,
-                        "display_name": model['display_name'],
-                        "repo": model['repo'],
-                        "file": best_file['name'],
-                        "size_gb": best_file['size_gb'],
-                        "download_url": f"https://huggingface.co/{model['repo']}/resolve/main/{best_file['name']}",
-                        "format": "gguf",
-                        "compatible": True,
-                        "architecture": model['architecture']
-                    }
+    for repo in possible_gguf_repos:
+        log(f"🔍 Checking specific GGUF repo: {repo}", "DEBUG")
+        # Try direct repository check instead of search
+        if check_huggingface_repo(repo, hf_token):
+            log(f"✅ Found GGUF repository: {repo}", "INFO")
+            
+            best_file = find_best_model_file(repo, hf_token)
+            if best_file:
+                return {
+                    **default_config,
+                    "display_name": model_name.replace("-", " ").title(),
+                    "repo": repo,
+                    "file": best_file['name'],
+                    "size_gb": best_file['size_gb'],
+                    "download_url": f"https://huggingface.co/{repo}/resolve/main/{best_file['name']}",
+                    "format": "gguf",
+                    "compatible": True,
+                    "architecture": detect_architecture(model_name)
+                }
     
-    # 3. Model not found
+    # 3. Try original repository guess
+    original_repo = guess_original_repo(model_name)
+    if original_repo:
+        log(f"🔍 Checking original repository: {original_repo}", "DEBUG")
+        if check_huggingface_repo(original_repo, hf_token):
+            log(f"⚠️  Found original repo (may need conversion): {original_repo}", "WARN")
+            
+            best_file = find_best_model_file(original_repo, hf_token)
+            if best_file:
+                file_format = 'gguf' if best_file['name'].endswith('.gguf') else 'safetensors' if best_file['name'].endswith('.safetensors') else 'other'
+                
+                return {
+                    **default_config,
+                    "display_name": model_name.replace("-", " ").title(),
+                    "repo": original_repo,
+                    "file": best_file['name'],
+                    "size_gb": best_file['size_gb'],
+                    "download_url": f"https://huggingface.co/{original_repo}/resolve/main/{best_file['name']}",
+                    "format": file_format,
+                    "compatible": file_format == 'gguf',
+                    "architecture": detect_architecture(model_name)
+                }
+    
+    # 4. Model not found
     log(f"❌ Model {model_name} not found in HuggingFace", "ERROR")
     log("This could mean:", "INFO")
     log("  - Model name is incorrect", "INFO") 
     log("  - Model is private and requires authentication", "INFO")
     log("  - Model doesn't exist on HuggingFace", "INFO")
+    log("", "INFO")
+    log("🔍 Let's try to find available models instead...", "INFO")
     
     return default_config
 
@@ -520,12 +547,30 @@ def enhance_config_with_model_discovery(config: Dict[str, str], hf_token: str) -
     
     if not model_name:
         # No model specified in config - use interactive selection
+        log("📝 No model specified in config - starting interactive selection", "INFO")
         model_name = interactive_model_selection(hf_token)
         config['MODEL_NAME'] = model_name
     
     # Discover model configuration
     log(f"🔍 Discovering configuration for: {model_name}", "INFO")
     model_config = discover_model_config(model_name, hf_token)
+    
+    # Check if model was found
+    if not model_config['download_url']:
+        log(f"❌ Could not find model '{model_name}' on HuggingFace", "ERROR")
+        log("🔄 Let's try interactive selection with available models...", "INFO")
+        
+        # Fall back to interactive selection
+        model_name = interactive_model_selection(hf_token)
+        config['MODEL_NAME'] = model_name
+        
+        # Try discovery again with the new model
+        model_config = discover_model_config(model_name, hf_token)
+        
+        if not model_config['download_url']:
+            log(f"❌ Still could not find model '{model_name}'", "ERROR")
+            log("Please check your internet connection and HuggingFace token", "ERROR")
+            sys.exit(1)
     
     # Check compatibility
     if not model_config['compatible']:
