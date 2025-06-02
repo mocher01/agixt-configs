@@ -223,17 +223,34 @@ def main():
         
         # Download all modules
         log("📦 Downloading installer modules...")
+        downloaded_modules = []
+        
         for module in modules:
             module_url = base_url + "/" + module
             module_path = os.path.join(temp_dir, module)
             
             log("📥 Downloading " + module + "...")
-            if not download_file(module_url, module_path, github_token):
+            if download_file(module_url, module_path, github_token):
+                log("✅ Downloaded " + module, "SUCCESS")
+                downloaded_modules.append(module)
+            else:
                 log("❌ Failed to download " + module, "ERROR")
-                log("ℹ️  This is expected - modules don't exist yet")
-                log("✅ BOOTSTRAPPER TESTING SUCCESSFUL - cleanup and download logic working")
-                sys.exit(1)
-            log("✅ Downloaded " + module, "SUCCESS")
+                log("ℹ️  Continuing with available modules...")
+        
+        log("📋 Downloaded " + str(len(downloaded_modules)) + " of " + str(len(modules)) + " modules")
+        
+        # Check if we have enough modules to proceed
+        if len(downloaded_modules) == 0:
+            log("❌ No modules downloaded - cannot proceed", "ERROR")
+            sys.exit(1)
+        
+        if "installer_core.py" not in downloaded_modules:
+            log("❌ installer_core.py required but not available", "ERROR")
+            sys.exit(1)
+        
+        if "installer_utils.py" not in downloaded_modules:
+            log("❌ installer_utils.py required but not available", "ERROR")
+            sys.exit(1)
         
         # Add temp directory to Python path
         sys.path.insert(0, temp_dir)
