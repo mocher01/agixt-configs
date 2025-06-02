@@ -210,13 +210,13 @@ def main():
     log("📁 Created temporary directory: " + temp_dir)
     
     try:
-        # Define required modules
+        # Define required modules - START WITH UTILS TO TEST DOWNLOAD
         modules = [
+            "installer_utils.py",     # ← Test this first
             "installer_core.py",
             "installer_config.py", 
             "installer_models.py",
-            "installer_docker.py",
-            "installer_utils.py"
+            "installer_docker.py"
         ]
         
         base_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/modules"
