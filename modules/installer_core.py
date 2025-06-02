@@ -75,6 +75,21 @@ def run_installation(config_name, github_token, skip_cleanup):
             log("❌ Prerequisites check failed", "ERROR")
             return False
         
+        # Test config loading if available
+        if config_available:
+            log("Testing configuration loading...")
+            test_config = installer_config.load_config_from_github(github_token)
+            if test_config:
+                log("✅ Configuration loading successful")
+                if installer_config.validate_config(test_config):
+                    log("✅ Configuration validation successful")
+                    enhanced_config = installer_config.enhance_config_with_dynamic_values(test_config)
+                    log("✅ Configuration enhancement successful")
+                else:
+                    log("⚠️  Configuration validation failed", "WARN")
+            else:
+                log("⚠️  Configuration loading failed", "WARN")
+        
         # If we have all modules, run full installation
         if config_available and models_available and docker_available:
             log("🚀 All modules available - running full installation...")
