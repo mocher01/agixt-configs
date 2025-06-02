@@ -13,7 +13,6 @@ import json
 import urllib.request
 import urllib.error
 import shutil
-from datetime import datetime
 from installer_utils import log
 
 def get_model_architecture(model_repo, model_name):
@@ -203,7 +202,7 @@ def get_model_config(model_name, hf_token):
     return None, {}
 
 def download_with_auth(url, target_path, token):
-    """Download file with HuggingFace authentication"""
+    """Download file with HuggingFace authentication - simplified version"""
     try:
         log("📥 Downloading: " + url)
         log("📁 Target: " + target_path)
@@ -215,26 +214,11 @@ def download_with_auth(url, target_path, token):
         req = urllib.request.Request(url)
         req.add_header('Authorization', 'Bearer ' + token)
         
-        # Download with authentication
-        with urllib.request.urlopen(req) as response:
-            total_size = int(response.headers.get('Content-Length', 0))
-            
+        # Simple download without progress tracking
+        log("⏳ Starting download (this may take a few minutes for large models)...")
+        with urllib.request.urlopen(req, timeout=300) as response:
             with open(target_path, 'wb') as f:
-                downloaded = 0
-                while True:
-                    chunk = response.read(8192)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    
-                    if total_size > 0:
-                        percent = round(downloaded * 100 / total_size, 1)
-                        downloaded_mb = round(downloaded / (1024 * 1024), 1)
-                        total_mb = round(total_size / (1024 * 1024), 1)
-                        print("\r[" + datetime.now().strftime('%H:%M:%S') + "] INFO: Download progress: " + str(percent) + "% (" + str(downloaded_mb) + "/" + str(total_mb) + " MB)", end='')
-        
-        print()  # New line after progress
+                shutil.copyfileobj(response, f)
         
         # Verify download
         if os.path.exists(target_path):
