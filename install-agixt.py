@@ -13,20 +13,13 @@ Usage:
   curl -H "Authorization: token YOUR_TOKEN" -sSL https://raw.githubusercontent.com/mocher01/agixt-configs/main/install-agixt.py | python3 - proxy YOUR_TOKEN --no-cleanup
 
 Features:
-✅ Downloads all required modules automatically
-✅ Same user experience as before
-✅ Professional modular architecture  
-✅ Universal model support with auto-detection
-✅ Configuration-driven installation
-✅ COMPREHENSIVE CLEANUP by default (containers, images, folders, networks)
-✅ Option to skip cleanup with --no-cleanup
-
-The bootstrapper will:
-1. Perform comprehensive cleanup (unless --no-cleanup specified)
-2. Download all installer modules from GitHub
-3. Load agixt.config from your repository
-4. Run the modular installer
-5. Clean up temporary files
+- Downloads all required modules automatically
+- Same user experience as before
+- Professional modular architecture  
+- Universal model support with auto-detection
+- Configuration-driven installation
+- COMPREHENSIVE CLEANUP by default (containers, images, folders, networks)
+- Option to skip cleanup with --no-cleanup
 """
 
 import os
@@ -38,12 +31,12 @@ import shutil
 import subprocess
 from datetime import datetime
 
-def log(message: str, level: str = "INFO"):
+def log(message, level="INFO"):
     """Enhanced logging with timestamps"""
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {level}: {message}")
 
-def run_command(command: str, timeout: int = 60) -> bool:
+def run_command(command, timeout=60):
     """Execute a shell command with proper error handling"""
     try:
         result = subprocess.run(
@@ -58,10 +51,10 @@ def run_command(command: str, timeout: int = 60) -> bool:
 
 def comprehensive_cleanup():
     """Perform comprehensive cleanup of all AGiXT and EzLocalAI components"""
-    log("🔍 Scanning for existing AGiXT/EzLocalAI installations...", "INFO")
+    log("🔍 Scanning for existing AGiXT/EzLocalAI installations...")
     
     # Find AGiXT/EzLocalAI containers
-    log("🐳 Checking for containers...", "INFO")
+    log("🐳 Checking for containers...")
     containers_to_remove = []
     
     try:
@@ -76,7 +69,7 @@ def comprehensive_cleanup():
         pass
     
     # Find AGiXT/EzLocalAI images
-    log("📦 Checking for images...", "INFO")
+    log("📦 Checking for images...")
     images_to_remove = []
     
     try:
@@ -91,7 +84,7 @@ def comprehensive_cleanup():
         pass
     
     # Find AGiXT directories
-    log("📁 Checking for installation directories...", "INFO")
+    log("📁 Checking for installation directories...")
     directories_to_remove = []
     
     base_paths = ['/var/apps', '/opt', '/home']
@@ -113,28 +106,28 @@ def comprehensive_cleanup():
         log("✅ System is already clean - no AGiXT/EzLocalAI components found", "SUCCESS")
         return True
     
-    log(f"🗑️  COMPREHENSIVE CLEANUP - Found {total_items} items to remove:", "INFO")
+    log(f"🗑️  COMPREHENSIVE CLEANUP - Found {total_items} items to remove:")
     
     if containers_to_remove:
-        log(f"🐳 Containers ({len(containers_to_remove)}): {', '.join(containers_to_remove)}", "INFO")
+        log(f"🐳 Containers ({len(containers_to_remove)}): {', '.join(containers_to_remove)}")
     
     if images_to_remove:
-        log(f"📦 Images ({len(images_to_remove)}): {', '.join(images_to_remove)}", "INFO")
+        log(f"📦 Images ({len(images_to_remove)}): {', '.join(images_to_remove)}")
     
     if directories_to_remove:
-        log(f"📁 Directories ({len(directories_to_remove)}): {', '.join(directories_to_remove)}", "INFO")
+        log(f"📁 Directories ({len(directories_to_remove)}): {', '.join(directories_to_remove)}")
     
     # Perform cleanup
     cleanup_success = True
     
     # 1. Stop and remove containers
     if containers_to_remove:
-        log("🛑 Stopping containers...", "INFO")
+        log("🛑 Stopping containers...")
         for container in containers_to_remove:
             if not run_command(f"docker stop {container}"):
                 log(f"⚠️  Could not stop {container} (may already be stopped)", "WARN")
         
-        log("🗑️  Removing containers...", "INFO")
+        log("🗑️  Removing containers...")
         for container in containers_to_remove:
             if run_command(f"docker rm {container}"):
                 log(f"✅ Removed container: {container}", "SUCCESS")
@@ -144,7 +137,7 @@ def comprehensive_cleanup():
     
     # 2. Remove images
     if images_to_remove:
-        log("🗑️  Removing images...", "INFO")
+        log("🗑️  Removing images...")
         for image in images_to_remove:
             if run_command(f"docker rmi {image}"):
                 log(f"✅ Removed image: {image}", "SUCCESS")
@@ -153,7 +146,7 @@ def comprehensive_cleanup():
     
     # 3. Remove directories
     if directories_to_remove:
-        log("🗑️  Removing directories...", "INFO")
+        log("🗑️  Removing directories...")
         for directory in directories_to_remove:
             try:
                 shutil.rmtree(directory, ignore_errors=True)
@@ -166,14 +159,14 @@ def comprehensive_cleanup():
                 cleanup_success = False
     
     # 4. Remove AGiXT network
-    log("🌐 Cleaning Docker network...", "INFO")
+    log("🌐 Cleaning Docker network...")
     if run_command("docker network rm agixt-network"):
         log("✅ Removed agixt-network", "SUCCESS")
     else:
-        log("ℹ️  agixt-network not found or already removed", "INFO")
+        log("ℹ️  agixt-network not found or already removed")
     
     # 5. Clean volumes (AGiXT-related only)
-    log("🗂️  Cleaning unused volumes...", "INFO")
+    log("🗂️  Cleaning unused volumes...")
     run_command("docker volume prune -f")
     
     if cleanup_success:
@@ -183,7 +176,7 @@ def comprehensive_cleanup():
     
     return True
 
-def download_file(url: str, target_path: str, github_token: str = None) -> bool:
+def download_file(url, target_path, github_token=None):
     """Download a file from GitHub with optional authentication"""
     try:
         req = urllib.request.Request(url)
@@ -201,8 +194,8 @@ def download_file(url: str, target_path: str, github_token: str = None) -> bool:
 
 def main():
     """Main bootstrapper function"""
-    log("🚀 AGiXT Installer v1.6 - Modular Bootstrapper", "INFO")
-    log("🔧 Professional installation with comprehensive cleanup", "INFO")
+    log("🚀 AGiXT Installer v1.6 - Modular Bootstrapper")
+    log("🔧 Professional installation with comprehensive cleanup")
     
     # Parse command line arguments
     config_name = "proxy"
@@ -213,7 +206,7 @@ def main():
         for i, arg in enumerate(sys.argv[1:], 1):
             if arg == "--no-cleanup" or arg == "--skip-cleanup":
                 skip_cleanup = True
-                log("🚫 Cleanup disabled via command line flag", "INFO")
+                log("🚫 Cleanup disabled via command line flag")
             elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
                 github_token = arg
             elif not arg.startswith("-"):
@@ -226,14 +219,14 @@ def main():
     
     # Perform comprehensive cleanup unless disabled
     if not skip_cleanup:
-        log("🗑️  Starting comprehensive cleanup...", "INFO")
+        log("🗑️  Starting comprehensive cleanup...")
         comprehensive_cleanup()
     else:
         log("⚠️  Skipping cleanup - existing installations may conflict", "WARN")
     
     # Create temporary directory for modules
     temp_dir = tempfile.mkdtemp(prefix="agixt_installer_")
-    log(f"📁 Created temporary directory: {temp_dir}", "INFO")
+    log(f"📁 Created temporary directory: {temp_dir}")
     
     try:
         # Define required modules
@@ -248,14 +241,15 @@ def main():
         base_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/modules"
         
         # Download all modules
-        log("📦 Downloading installer modules...", "INFO")
+        log("📦 Downloading installer modules...")
         for module in modules:
             module_url = f"{base_url}/{module}"
             module_path = os.path.join(temp_dir, module)
             
-            log(f"📥 Downloading {module}...", "INFO")
+            log(f"📥 Downloading {module}...")
             if not download_file(module_url, module_path, github_token):
                 log(f"❌ Failed to download {module}", "ERROR")
+                log("ℹ️  This is expected - modules don't exist yet")
                 sys.exit(1)
             log(f"✅ Downloaded {module}", "SUCCESS")
         
@@ -263,13 +257,13 @@ def main():
         sys.path.insert(0, temp_dir)
         
         # Import and run the main installer
-        log("🔧 Loading installer modules...", "INFO")
+        log("🔧 Loading installer modules...")
         try:
             import installer_core
             log("✅ Modules loaded successfully", "SUCCESS")
             
             # Run the main installer
-            log("🚀 Starting modular installation...", "INFO")
+            log("🚀 Starting modular installation...")
             success = installer_core.run_installation(config_name, github_token, skip_cleanup)
             
             if success:
@@ -280,7 +274,7 @@ def main():
                 
         except ImportError as e:
             log(f"❌ Failed to import installer modules: {e}", "ERROR")
-            log("ℹ️  This is expected - modules will be created next", "INFO")
+            log("ℹ️  This is expected - modules will be created next")
             sys.exit(1)
         except Exception as e:
             log(f"❌ Installation error: {e}", "ERROR")
@@ -290,42 +284,9 @@ def main():
         # Clean up temporary directory
         try:
             shutil.rmtree(temp_dir)
-            log("🧹 Cleaned up temporary files", "INFO")
+            log("🧹 Cleaned up temporary files")
         except Exception:
             pass
 
 if __name__ == "__main__":
-    main()")
-            
-            # Run the main installer
-            log("🚀 Starting modular installation...", "INFO")
-            success = installer_core.run_installation(config_name, github_token, skip_cleanup)
-            
-            if success:
-                log("🎉 AGiXT installation completed successfully!", "SUCCESS")
-            else:
-                log("❌ Installation failed", "ERROR")
-                sys.exit(1)
-                
-        except ImportError as e:
-            log(f"❌ Failed to import installer modules: {e}", "ERROR")
-            sys.exit(1)
-        except Exception as e:
-            log(f"❌ Installation error: {e}", "ERROR")
-            sys.exit(1)
-    
-    finally:
-        # Clean up temporary directory
-        try:
-            shutil.rmtree(temp_dir)
-            log("🧹 Cleaned up temporary files", "INFO")
-        except Exception:
-            pass
-
-if __name__ == "__main__":
-    main()#!/usr/bin/env python3
-"""
-AGiXT Automated Installer - Modular Bootstrapper
-================================================
-
-This is the main entry
+    main()
