@@ -280,6 +280,35 @@ def main():
                 
         except ImportError as e:
             log(f"❌ Failed to import installer modules: {e}", "ERROR")
+            log("ℹ️  This is expected - modules will be created next", "INFO")
+            sys.exit(1)
+        except Exception as e:
+            log(f"❌ Installation error: {e}", "ERROR")
+            sys.exit(1)
+    
+    finally:
+        # Clean up temporary directory
+        try:
+            shutil.rmtree(temp_dir)
+            log("🧹 Cleaned up temporary files", "INFO")
+        except Exception:
+            pass
+
+if __name__ == "__main__":
+    main()")
+            
+            # Run the main installer
+            log("🚀 Starting modular installation...", "INFO")
+            success = installer_core.run_installation(config_name, github_token, skip_cleanup)
+            
+            if success:
+                log("🎉 AGiXT installation completed successfully!", "SUCCESS")
+            else:
+                log("❌ Installation failed", "ERROR")
+                sys.exit(1)
+                
+        except ImportError as e:
+            log(f"❌ Failed to import installer modules: {e}", "ERROR")
             sys.exit(1)
         except Exception as e:
             log(f"❌ Installation error: {e}", "ERROR")
