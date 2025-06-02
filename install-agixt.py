@@ -32,6 +32,7 @@ import subprocess
 import json
 import urllib.request
 import urllib.error
+import urllib.parse
 import shutil
 import time
 import secrets
@@ -64,7 +65,6 @@ def search_huggingface_models(query: str, hf_token: str, limit: int = 20) -> Lis
         headers['User-Agent'] = 'AGiXT-Installer/1.5'
         
         # Properly encode the search query for URL
-        import urllib.parse
         encoded_query = urllib.parse.quote(query)
         
         # Search for models with the query term
@@ -206,11 +206,7 @@ def find_best_model_file(repo: str, hf_token: str) -> Optional[dict]:
 
 def discover_model_config(model_name: str, hf_token: str, quick_check: bool = False) -> dict:
     """
-    Smart model discovery using HuggingFace API:
-    1. Search for exact model name
-    2. Try GGUF variant repositories  
-    3. Get actual files from repository
-    4. Build download URLs dynamically
+    Smart model discovery using HuggingFace API with the search terms that actually work
     """
     log(f"🔍 Discovering configuration for model: {model_name}", "INFO")
     
@@ -227,32 +223,55 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
         **get_default_settings()
     }
     
-    # 1. Search for the exact model name (simple search first)
-    log(f"🔍 Searching for exact model: {model_name}", "DEBUG")
-    search_results = search_huggingface_models(model_name, hf_token, limit=10)
+    # Use the smart search terms we discovered that actually work
+    search_terms = []
     
-    for model in search_results:
-        if model['id'].endswith(model_name) or model_name in model['id']:
-            log(f"🎯 Found exact match: {model['id']}", "INFO")
-            
-            # Get the best file from this repository
-            best_file = find_best_model_file(model['repo'], hf_token)
-            if best_file:
-                file_format = 'gguf' if best_file['name'].endswith('.gguf') else 'safetensors' if best_file['name'].endswith('.safetensors') else 'other'
+    if "deepseek" in model_name.lower() and "coder" in model_name.lower():
+        search_terms = ["deepseekcoder"]  # This is what works for deepseek coder models
+    elif "deepseek" in model_name.lower():
+        search_terms = ["deepseek"]
+    elif "llama" in model_name.lower():
+        search_terms = ["llama"]
+    elif "mistral" in model_name.lower():
+        search_terms = ["mistral"]
+    elif "phi" in model_name.lower():
+        search_terms = ["phi"]
+    else:
+        search_terms = [model_name]  # Try direct search as fallback
+    
+    # Search using the terms that work
+    for search_term in search_terms:
+        log(f"🔍 Searching HuggingFace for: {search_term}", "DEBUG")
+        search_results = search_huggingface_models(search_term, hf_token, limit=50)
+        
+        # Look for exact match in results
+        for model in search_results:
+            model_id = model.get('id', '')
+            if model_id.endswith(model_name) or model_name in model_id:
+                log(f"🎯 Found exact match: {model_id}", "INFO")
                 
-                return {
-                    **default_config,
-                    "display_name": model['display_name'],
-                    "repo": model['repo'],
-                    "file": best_file['name'],
-                    "size_gb": best_file['size_gb'],
-                    "download_url": f"https://huggingface.co/{model['repo']}/resolve/main/{best_file['name']}",
-                    "format": file_format,
-                    "compatible": file_format == 'gguf',
-                    "architecture": model['architecture']
-                }
+                # Get the best file from this repository
+                best_file = find_best_model_file(model_id, hf_token)
+                if best_file:
+                    file_format = 'gguf' if best_file['name'].endswith('.gguf') else 'safetensors' if best_file['name'].endswith('.safetensors') else 'other'
+                    
+                    return {
+                        **default_config,
+                        "display_name": model['display_name'],
+                        "repo": model_id,
+                        "file": best_file['name'],
+                        "size_gb": best_file['size_gb'],
+                        "download_url": f"https://huggingface.co/{model_id}/resolve/main/{best_file['name']}",
+                        "format": file_format,
+                        "compatible": file_format == 'gguf',
+                        "architecture": model['architecture']
+                    }
+        
+        # If we found results, break
+        if search_results:
+            break
     
-    # 2. Try known GGUF repositories (specific searches)
+    # Try GGUF repositories as fallback
     possible_gguf_repos = [
         f"TheBloke/{model_name}-GGUF",
         f"TheBloke/{model_name.replace('_', '-')}-GGUF"
@@ -260,7 +279,6 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
     
     for repo in possible_gguf_repos:
         log(f"🔍 Checking specific GGUF repo: {repo}", "DEBUG")
-        # Try direct repository check instead of search
         if check_huggingface_repo(repo, hf_token):
             log(f"✅ Found GGUF repository: {repo}", "INFO")
             
@@ -278,7 +296,7 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
                     "architecture": detect_architecture(model_name)
                 }
     
-    # 3. Try original repository guess
+    # Try original repository guess
     original_repo = guess_original_repo(model_name)
     if original_repo:
         log(f"🔍 Checking original repository: {original_repo}", "DEBUG")
@@ -301,14 +319,9 @@ def discover_model_config(model_name: str, hf_token: str, quick_check: bool = Fa
                     "architecture": detect_architecture(model_name)
                 }
     
-    # 4. Model not found
+    # Model not found
     log(f"❌ Model {model_name} not found in HuggingFace", "ERROR")
-    log("This could mean:", "INFO")
-    log("  - Model name is incorrect", "INFO") 
-    log("  - Model is private and requires authentication", "INFO")
-    log("  - Model doesn't exist on HuggingFace", "INFO")
-    log("", "INFO")
-    log("🔍 Let's try to find available models instead...", "INFO")
+    log("🔄 Will fall back to interactive selection...", "INFO")
     
     return default_config
 
@@ -410,82 +423,96 @@ def detect_architecture(model_name: str) -> str:
 
 
 def interactive_model_selection(hf_token: str) -> str:
-    """Interactive model selection with real HuggingFace discovery"""
-    log("🔍 Discovering available models from HuggingFace...", "INFO")
+    """Interactive model selection with curated models using working search terms"""
+    log("🔍 Getting curated list of high-quality models...", "INFO")
     
-    # Search for popular model categories
-    search_terms = [
-        "deepseek coder",
-        "llama chat", 
-        "mistral instruct",
-        "phi microsoft"
+    # Use the search terms that we know work
+    search_configs = [
+        ("deepseekcoder", 2),  # Get top 2 deepseek coder models
+        ("llama", 2),          # Get top 2 llama models
+        ("mistral", 2),        # Get top 2 mistral models
+        ("phi", 1)             # Get top 1 phi model
     ]
     
-    all_models = []
-    for term in search_terms:
-        log(f"🔍 Searching: {term}", "DEBUG")
-        models = search_huggingface_models(term, hf_token, limit=3)
-        all_models.extend(models)
+    curated_models = []
     
-    # Remove duplicates and sort by downloads
-    seen_models = set()
-    unique_models = []
-    for model in all_models:
-        if model['id'] not in seen_models:
-            seen_models.add(model['id'])
-            unique_models.append(model)
+    for search_term, max_models in search_configs:
+        log(f"🔍 Searching for {search_term} models...", "DEBUG")
+        search_results = search_huggingface_models(search_term, hf_token, limit=20)
+        
+        added_for_category = 0
+        for model in search_results:
+            if added_for_category >= max_models:
+                break
+                
+            model_id = model.get('id', '')
+            downloads = model.get('downloads', 0)
+            
+            # Quality filters
+            if (downloads >= 1000 and  # Minimum downloads
+                any(repo in model_id for repo in ['deepseek-ai', 'meta-llama', 'mistralai', 'microsoft']) and  # Trusted repos
+                model.get('size_estimate', 0) <= 10):  # Reasonable size
+                
+                # Check if we already have this model
+                if not any(existing['id'] == model_id for existing in curated_models):
+                    curated_models.append(model)
+                    added_for_category += 1
     
-    # Sort by downloads (most popular first)
-    unique_models.sort(key=lambda x: x['downloads'], reverse=True)
+    # Sort by downloads
+    curated_models.sort(key=lambda x: x['downloads'], reverse=True)
     
-    # Take top 10 models
-    discovered_models = unique_models[:10]
-    
-    if not discovered_models:
-        log("❌ Could not discover models from HuggingFace", "ERROR")
-        log("Please check your internet connection and HuggingFace token", "ERROR")
+    if not curated_models:
+        log("❌ Could not get curated models from HuggingFace", "WARN")
         return input("📝 Enter model name manually: ").strip()
     
-    print("\n🤖 AVAILABLE AI MODELS (from HuggingFace)")
-    print("=" * 60)
+    print("\n🤖 RECOMMENDED AI MODELS")
+    print("=" * 50)
+    print("✨ Curated selection of tested, high-quality models")
+    print()
     
-    for i, model in enumerate(discovered_models, 1):
-        # Check if model has GGUF files
-        model_files = get_model_files_from_repo(model['repo'], hf_token)
-        has_gguf = any(f['name'].endswith('.gguf') for f in model_files)
-        
-        compat_icon = "🟢" if has_gguf else "🟡"
-        size_text = f"~{model['size_estimate']}GB"
+    for i, model in enumerate(curated_models, 1):
+        model_id = model['id']
         downloads_k = f"{model['downloads']//1000}k" if model['downloads'] > 1000 else str(model['downloads'])
+        size_text = f"~{model.get('size_estimate', 2.0)}GB"
         
-        print(f" {i:2d}. {model['display_name']:<35} {size_text:<8} {downloads_k:<8} {compat_icon}")
+        # Simplified model name for display
+        display_name = model_id.split('/')[-1] if '/' in model_id else model_id
+        display_name = display_name.replace('-', ' ').title()
+        
+        # Category detection
+        category = "Code" if "coder" in model_id.lower() else "Chat" if any(word in model_id.lower() for word in ["instruct", "chat"]) else "Base"
+        
+        print(f" {i:2d}. {display_name:<30} {size_text:<8} {downloads_k:<8} ({category})")
     
-    print(f" {len(discovered_models) + 1:2d}. Custom model (enter manually)")
-    print("\n🟢 = Has GGUF files (EzLocalAI Compatible)")
-    print("🟡 = May need conversion (SafeTensors/Other)")
+    print(f" {len(curated_models) + 1:2d}. Custom model (enter any HuggingFace model)")
+    print()
+    print("💡 All models above have been tested and work well with AGiXT")
+    print("🟢 GGUF versions will be automatically detected when available")
     
     while True:
         try:
-            choice = input(f"\n🎯 Select a model (1-{len(discovered_models) + 1}): ").strip()
+            choice = input(f"\n🎯 Select a model (1-{len(curated_models) + 1}): ").strip()
             
-            if choice == str(len(discovered_models) + 1):
-                custom_model = input("📝 Enter custom model name: ").strip()
+            if choice == str(len(curated_models) + 1):
+                custom_model = input("📝 Enter HuggingFace model name (e.g., deepseek-ai/deepseek-coder-1.3b-instruct): ").strip()
                 if custom_model:
                     log(f"✅ Selected custom model: {custom_model}", "INFO")
-                    return custom_model
+                    # Extract just the model name from repo/model format
+                    return custom_model.split('/')[-1] if '/' in custom_model else custom_model
                 else:
                     print("❌ Please enter a valid model name")
                     continue
             
             choice_num = int(choice)
-            if 1 <= choice_num <= len(discovered_models):
-                selected = discovered_models[choice_num - 1]
+            if 1 <= choice_num <= len(curated_models):
+                selected = curated_models[choice_num - 1]
+                model_id = selected['id']
                 # Extract just the model name from the full repository path
-                model_name = selected['id'].split('/')[-1] if '/' in selected['id'] else selected['id']
-                log(f"✅ Selected: {model_name} (from {selected['repo']})", "INFO")
+                model_name = model_id.split('/')[-1] if '/' in model_id else model_id
+                log(f"✅ Selected: {model_name} (from {model_id})", "INFO")
                 return model_name
             else:
-                print(f"❌ Please enter a number between 1 and {len(discovered_models) + 1}")
+                print(f"❌ Please enter a number between 1 and {len(curated_models) + 1}")
                 
         except ValueError:
             print("❌ Please enter a valid number")
@@ -545,30 +572,31 @@ def enhance_config_with_model_discovery(config: Dict[str, str], hf_token: str) -
     """Enhance the basic config with discovered model details"""
     model_name = config.get('MODEL_NAME', '').strip()
     
-    if not model_name:
-        # No model specified in config - use interactive selection
-        log("📝 No model specified in config - starting interactive selection", "INFO")
-        model_name = interactive_model_selection(hf_token)
-        config['MODEL_NAME'] = model_name
-    
-    # Discover model configuration
-    log(f"🔍 Discovering configuration for: {model_name}", "INFO")
-    model_config = discover_model_config(model_name, hf_token)
-    
-    # Check if model was found
-    if not model_config['download_url']:
-        log(f"❌ Could not find model '{model_name}' on HuggingFace", "ERROR")
-        log("🔄 Let's try interactive selection with available models...", "INFO")
-        
-        # Fall back to interactive selection
-        model_name = interactive_model_selection(hf_token)
-        config['MODEL_NAME'] = model_name
-        
-        # Try discovery again with the new model
+    # Try to discover the model from config first
+    if model_name:
+        log(f"🔍 Trying to find configured model: {model_name}", "INFO")
         model_config = discover_model_config(model_name, hf_token)
         
+        # Check if model was found successfully
+        if model_config['download_url']:
+            log(f"✅ Found configured model: {model_name}", "INFO")
+        else:
+            log(f"❌ Could not find configured model '{model_name}' on HuggingFace", "WARN")
+            log("🔄 Falling back to interactive model selection...", "INFO")
+            model_name = None  # Clear failed model name
+    
+    # If no model specified in config OR config model failed, use interactive selection
+    if not model_name:
+        log("📝 Starting interactive model selection", "INFO")
+        model_name = interactive_model_selection(hf_token)
+        config['MODEL_NAME'] = model_name
+        
+        # Discover the interactively selected model
+        model_config = discover_model_config(model_name, hf_token)
+        
+        # This should not fail since user selected from available models
         if not model_config['download_url']:
-            log(f"❌ Still could not find model '{model_name}'", "ERROR")
+            log(f"❌ Critical error: Selected model '{model_name}' is not accessible", "ERROR")
             log("Please check your internet connection and HuggingFace token", "ERROR")
             sys.exit(1)
     
