@@ -77,18 +77,23 @@ def run_installation(config_name, github_token, skip_cleanup):
         
         # Test config loading if available
         if config_available:
-            log("Testing configuration loading...")
-            test_config = installer_config.load_config_from_github(github_token)
-            if test_config:
-                log("✅ Configuration loading successful")
-                if installer_config.validate_config(test_config):
-                    log("✅ Configuration validation successful")
-                    enhanced_config = installer_config.enhance_config_with_dynamic_values(test_config)
-                    log("✅ Configuration enhancement successful")
+            log("🔧 CONFIG MODULE IS AVAILABLE - Testing configuration loading...")
+            try:
+                test_config = installer_config.load_config_from_github(github_token)
+                if test_config:
+                    log("✅ Configuration loading successful")
+                    if installer_config.validate_config(test_config):
+                        log("✅ Configuration validation successful")
+                        enhanced_config = installer_config.enhance_config_with_dynamic_values(test_config)
+                        log("✅ Configuration enhancement successful")
+                    else:
+                        log("⚠️  Configuration validation failed", "WARN")
                 else:
-                    log("⚠️  Configuration validation failed", "WARN")
-            else:
-                log("⚠️  Configuration loading failed", "WARN")
+                    log("⚠️  Configuration loading failed", "WARN")
+            except Exception as e:
+                log("❌ Config testing error: " + str(e), "ERROR")
+        else:
+            log("⚠️  CONFIG MODULE NOT AVAILABLE - Skipping config tests", "WARN")
         
         # If we have all modules, run full installation
         if config_available and models_available and docker_available:
