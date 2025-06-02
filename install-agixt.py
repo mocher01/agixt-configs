@@ -536,11 +536,9 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
     env_file = os.path.join(install_path, ".env")
     
     try:
-        # Generate API key if needed
-        api_key = config.get('AGIXT_API_KEY')
-        if not api_key or api_key == 'YOUR_GENERATED_API_KEY_HERE':
-            api_key = generate_secure_api_key()
-            log("Generated new secure API key", "SUCCESS")
+        # ALWAYS generate a new secure API key (never use config value)
+        api_key = generate_secure_api_key()
+        log("Generated new secure API key", "SUCCESS")
         
         # Get version and model info from config
         version = config.get('AGIXT_VERSION', 'unknown')
@@ -556,7 +554,7 @@ def create_env_file(install_path: str, config: Dict[str, str]) -> bool:
             
             # Group variables by category (using config values)
             categories = {
-                "VERSION & BASIC": ["AGIXT_VERSION", "INSTALL_DATE", "AGIXT_AUTO_UPDATE", "UVICORN_WORKERS", "WORKING_DIRECTORY", "TZ"],
+                "VERSION & BASIC": ["AGIXT_VERSION", "INSTALL_DATE", "AGIXT_AUTO_UPDATE", "AGIXT_API_KEY", "UVICORN_WORKERS", "WORKING_DIRECTORY", "TZ"],
                 "PROXY URLS": ["AGIXT_SERVER", "AGIXT_URI", "APP_URI", "AUTH_WEB"],
                 "INTERFACE": ["APP_NAME", "APP_DESCRIPTION", "AGIXT_AGENT", "AGIXT_SHOW_SELECTION", "AGIXT_SHOW_AGENT_BAR", "AGIXT_SHOW_APP_BAR", "AGIXT_CONVERSATION_MODE", "INTERACTIVE_MODE", "THEME_NAME", "AGIXT_FOOTER_MESSAGE"],
                 "AUTHENTICATION": ["AUTH_PROVIDER", "CREATE_AGENT_ON_REGISTER", "CREATE_AGIXT_AGENT", "ALLOW_EMAIL_SIGN_IN"],
