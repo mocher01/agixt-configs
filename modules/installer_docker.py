@@ -19,6 +19,17 @@ def create_configuration(install_path, config):
     try:
         log("🐳 Creating Docker configuration...")
         
+        # Ensure we have the required dynamic values
+        if 'INSTALL_DATE' not in config:
+            from datetime import datetime
+            config['INSTALL_DATE'] = datetime.now().isoformat()
+            log("✅ Added missing INSTALL_DATE: " + config['INSTALL_DATE'])
+        
+        if 'AGIXT_API_KEY' not in config:
+            from installer_utils import generate_secure_api_key
+            config['AGIXT_API_KEY'] = generate_secure_api_key()
+            log("✅ Added missing AGIXT_API_KEY: " + config['AGIXT_API_KEY'][:8] + "...")
+        
         # Organize configuration values by category
         categories = {
             "VERSION & BASIC": [
@@ -135,11 +146,11 @@ services:
       - agixt-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8091/v1/models"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8091/v1/models || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
 
   agixt:
     image: joshxt/agixt:main
@@ -161,11 +172,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7437/api/status"]
+      test: ["CMD-SHELL", "curl -f http://localhost:7437/api/status || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 90s
+      timeout: 15s
+      retries: 5
+      start_period: 150s
 
   agixtinteractive:
     image: joshxt/agixt-interactive:main
@@ -198,11 +209,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3437"]
+      test: ["CMD-SHELL", "curl -f http://localhost:3437 || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
+      timeout: 15s
+      retries: 5
+      start_period: 180s
 """
         
         docker_compose_path = os.path.join(install_path, "docker-compose.yml")
@@ -267,18 +278,18 @@ def start_services(install_path, config):
         # Monitor service startup
         log("⏳ Waiting for services to initialize...")
         
-        # Wait for EzLocalAI first (30 seconds)
-        log("🤖 Waiting for EzLocalAI to start (30 seconds)...")
-        time.sleep(30)
+        # Wait for EzLocalAI first (60 seconds for large model)
+        log("🤖 Waiting for EzLocalAI to start (60 seconds for model loading)...")
+        time.sleep(60)
         
         # Check EzLocalAI status
         ezlocalai_ready = False
-        for attempt in range(6):  # 6 attempts, 10 seconds each
+        for attempt in range(10):  # 10 attempts, 15 seconds each
             result = subprocess.run(
                 ["docker", "compose", "exec", "-T", "ezlocalai", "curl", "-f", "http://localhost:8091/v1/models"],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=15
             )
             
             if result.returncode == 0:
@@ -286,8 +297,8 @@ def start_services(install_path, config):
                 ezlocalai_ready = True
                 break
             else:
-                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/6)...")
-                time.sleep(10)
+                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/10), waiting 15s...")
+                time.sleep(15)
         
         if not ezlocalai_ready:
             log("⚠️  EzLocalAI may not be fully ready yet", "WARN")
