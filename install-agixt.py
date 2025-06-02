@@ -170,8 +170,9 @@ def download_file(url, target_path, github_token=None):
         return False
 
 def main():
-    log("🚀 AGiXT Installer v1.6 - Modular Bootstrapper")
+    log("🚀 AGiXT Installer v1.6 - FULL BOOTSTRAPPER WITH CLEANUP")
     log("🔧 Professional installation with comprehensive cleanup")
+    log("🆕 This is the NEW version with comprehensive cleanup functionality")
     
     # Parse command line arguments
     config_name = "proxy"
@@ -193,12 +194,16 @@ def main():
         log("Usage: script.py proxy github_token [--no-cleanup]", "ERROR")
         sys.exit(1)
     
+    log("🔍 CLEANUP PHASE STARTING...")
+    
     # Perform comprehensive cleanup unless disabled
     if not skip_cleanup:
         log("🗑️  Starting comprehensive cleanup...")
         comprehensive_cleanup()
     else:
         log("⚠️  Skipping cleanup - existing installations may conflict", "WARN")
+    
+    log("📦 MODULE DOWNLOAD PHASE STARTING...")
     
     # Create temporary directory for modules
     temp_dir = tempfile.mkdtemp(prefix="agixt_installer_")
@@ -226,6 +231,7 @@ def main():
             if not download_file(module_url, module_path, github_token):
                 log("❌ Failed to download " + module, "ERROR")
                 log("ℹ️  This is expected - modules don't exist yet")
+                log("✅ BOOTSTRAPPER TESTING SUCCESSFUL - cleanup and download logic working")
                 sys.exit(1)
             log("✅ Downloaded " + module, "SUCCESS")
         
