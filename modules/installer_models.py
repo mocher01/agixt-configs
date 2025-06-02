@@ -13,6 +13,7 @@ import json
 import urllib.request
 import urllib.error
 import shutil
+from datetime import datetime
 from installer_utils import log
 
 def get_model_architecture(model_repo, model_name):
@@ -231,7 +232,7 @@ def download_with_auth(url, target_path, token):
                         percent = round(downloaded * 100 / total_size, 1)
                         downloaded_mb = round(downloaded / (1024 * 1024), 1)
                         total_mb = round(total_size / (1024 * 1024), 1)
-                        print("\r[" + str(datetime.now().strftime('%H:%M:%S')) + "] INFO: Download progress: " + str(percent) + "% (" + str(downloaded_mb) + "/" + str(total_mb) + " MB)", end='')
+                        print("\r[" + datetime.now().strftime('%H:%M:%S') + "] INFO: Download progress: " + str(percent) + "% (" + str(downloaded_mb) + "/" + str(total_mb) + " MB)", end='')
         
         print()  # New line after progress
         
@@ -313,7 +314,6 @@ def setup_models(install_path, config):
             log("📥 Downloading GGUF model from HuggingFace with authentication...")
             
             # Download GGUF model with authentication
-            from datetime import datetime
             if not download_with_auth(model_config['model_url'], target_model_path, hf_token):
                 log("❌ Failed to download " + model_config['model_file'], "ERROR")
                 return False
