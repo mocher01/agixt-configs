@@ -147,10 +147,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8091/v1/models || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 120s
+      interval: 45s
+      timeout: 30s
+      retries: 8
+      start_period: 300s
 
   agixt:
     image: joshxt/agixt:main
@@ -168,8 +168,7 @@ services:
     networks:
       - agixt-network
     depends_on:
-      ezlocalai:
-        condition: service_healthy
+      - ezlocalai
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:7437/api/status || exit 1"]
@@ -205,8 +204,7 @@ services:
     networks:
       - agixt-network
     depends_on:
-      agixt:
-        condition: service_healthy
+      - agixt
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:3437 || exit 1"]
@@ -278,18 +276,18 @@ def start_services(install_path, config):
         # Monitor service startup
         log("⏳ Waiting for services to initialize...")
         
-        # Wait for EzLocalAI first (60 seconds for large model)
-        log("🤖 Waiting for EzLocalAI to start (60 seconds for model loading)...")
-        time.sleep(60)
+        # Wait for EzLocalAI first (120 seconds for large model loading)
+        log("🤖 Waiting for EzLocalAI to start (120 seconds for model loading)...")
+        time.sleep(120)
         
         # Check EzLocalAI status
         ezlocalai_ready = False
-        for attempt in range(10):  # 10 attempts, 15 seconds each
+        for attempt in range(15):  # 15 attempts, 20 seconds each = 5 minutes total
             result = subprocess.run(
                 ["docker", "compose", "exec", "-T", "ezlocalai", "curl", "-f", "http://localhost:8091/v1/models"],
                 capture_output=True,
                 text=True,
-                timeout=15
+                timeout=20
             )
             
             if result.returncode == 0:
@@ -297,8 +295,8 @@ def start_services(install_path, config):
                 ezlocalai_ready = True
                 break
             else:
-                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/10), waiting 15s...")
-                time.sleep(15)
+                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/15), waiting 20s...")
+                time.sleep(20)
         
         if not ezlocalai_ready:
             log("⚠️  EzLocalAI may not be fully ready yet", "WARN")
