@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Core Module
-=============================
+AGiXT Installer - Core Module (Updated for Public Repo)
+=======================================================
 
 Main installation orchestrator that coordinates all other modules.
 This module manages the installation flow and calls appropriate functions
-from other modules.
+from other modules. Updated to work without GitHub token requirement.
 """
 
 import sys
@@ -17,7 +17,10 @@ def run_installation(config_name, github_token, skip_cleanup):
     
     log("🎯 AGiXT Core Installer v1.6 - Starting Installation Process")
     log("📋 Configuration: " + config_name)
-    log("🔑 GitHub token: " + github_token[:8] + "...")
+    if github_token:
+        log("🔑 GitHub token: " + github_token[:8] + "...")
+    else:
+        log("🔑 GitHub token: Not provided (using public repository)")
     log("🗑️  Cleanup skipped: " + str(skip_cleanup))
     
     try:
@@ -79,6 +82,7 @@ def run_installation(config_name, github_token, skip_cleanup):
         if config_available:
             log("🔧 CONFIG MODULE IS AVAILABLE - Testing configuration loading...")
             try:
+                # Pass github_token (may be None) to config loader
                 test_config = installer_config.load_config_from_github(github_token)
                 if test_config:
                     log("✅ Configuration loading successful")
