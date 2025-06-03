@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Configuration Module
-======================================
+AGiXT Installer - Configuration Module (FIXED)
+==============================================
 
 Handles loading and parsing configuration from GitHub repository.
 This module manages the agixt.config file and validates all settings.
+
+FIXED: File handling bug after downloading config from GitHub
 """
 
 import urllib.request
@@ -38,7 +40,7 @@ def load_config_from_github(github_token):
                     
                     log("✅ Successfully downloaded config from: " + config_file, "SUCCESS")
                     
-                    # Parse the config file
+                    # Parse the config file directly from content (don't save to disk yet)
                     for line_num, line in enumerate(content.split('\n'), 1):
                         line = line.strip()
                         
@@ -60,10 +62,14 @@ def load_config_from_github(github_token):
                                 
                             config[key] = value
                     
-                    # Save config locally for reference
-                    with open('agixt.config', 'w') as f:
-                        f.write(content)
-                    log("💾 Configuration saved locally as agixt.config", "SUCCESS")
+                    # FIXED: Only save to disk AFTER successful parsing
+                    try:
+                        with open('agixt.config', 'w') as f:
+                            f.write(content)
+                        log("💾 Configuration saved locally as agixt.config", "SUCCESS")
+                    except Exception as save_error:
+                        log("⚠️  Could not save config locally: " + str(save_error), "WARN")
+                        # Continue anyway since we have the config in memory
                     
                     # Validate required keys (using MODEL_NAME instead of MODEL_HF_NAME)
                     required_keys = [
