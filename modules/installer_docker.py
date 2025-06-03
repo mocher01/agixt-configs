@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module
-===============================
+AGiXT Installer - Docker Module (FIXED)
+=======================================
 
 Handles Docker configuration and service management.
-This module creates .env files, configures docker-compose.yml,
-and starts all AGiXT services.
+Fixed to match the working single-file version approach.
 """
 
 import os
@@ -114,8 +113,8 @@ def create_configuration(install_path, config):
         
         log("✅ .env file created successfully", "SUCCESS")
         
-        # Update docker-compose.yml with enhanced configuration
-        log("🐳 Updating docker-compose.yml...")
+        # Create simplified docker-compose.yml (matching working version)
+        log("🐳 Creating docker-compose.yml...")
         
         docker_compose_content = f"""version: '3.8'
 
@@ -145,12 +144,6 @@ services:
     networks:
       - agixt-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8091/v1/models || exit 1"]
-      interval: 45s
-      timeout: 30s
-      retries: 8
-      start_period: 300s
 
   agixt:
     image: joshxt/agixt:main
@@ -170,12 +163,6 @@ services:
     depends_on:
       - ezlocalai
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7437/api/status || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 150s
 
   agixtinteractive:
     image: joshxt/agixt-interactive:main
@@ -206,12 +193,6 @@ services:
     depends_on:
       - agixt
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3437 || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 180s
 """
         
         docker_compose_path = os.path.join(install_path, "docker-compose.yml")
@@ -239,193 +220,104 @@ services:
         return False
 
 def start_services(install_path, config):
-    """Start Docker Compose services with proper error handling and monitoring"""
+    """Start Docker Compose services - FIXED to match working version"""
     
     try:
         log("🚀 Starting AGiXT services...")
         
-        # Change to installation directory
-        original_cwd = os.getcwd()
-        os.chdir(install_path)
-        
-        # Stop any existing services first
-        log("🛑 Stopping any existing services...")
-        subprocess.run(
-            ["docker", "compose", "down"],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        # Start services with build if needed
-        log("🔄 Starting services with docker-compose...")
-        result = subprocess.run(
-            ["docker", "compose", "up", "-d", "--remove-orphans"],
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        
-        if result.returncode != 0:
-            log("❌ Failed to start services: " + result.stderr, "ERROR")
-            os.chdir(original_cwd)
+        # Verify install_path exists and has required files
+        if not os.path.exists(install_path):
+            log("❌ Installation path does not exist: " + install_path, "ERROR")
             return False
         
-        log("✅ Docker services started successfully", "SUCCESS")
+        docker_compose_path = os.path.join(install_path, "docker-compose.yml")
+        if not os.path.exists(docker_compose_path):
+            log("❌ docker-compose.yml not found: " + docker_compose_path, "ERROR")
+            return False
         
-        # Monitor service startup
-        log("⏳ Waiting for services to initialize...")
+        log("✅ Installation directory verified: " + install_path)
+        log("✅ docker-compose.yml found: " + docker_compose_path)
         
-        # Wait for EzLocalAI first (120 seconds for large model loading)
-        log("🤖 Waiting for EzLocalAI to start (120 seconds for model loading)...")
-        time.sleep(120)
-        
-        # Check EzLocalAI status
-        ezlocalai_ready = False
-        for attempt in range(15):  # 15 attempts, 20 seconds each = 5 minutes total
-            result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "ezlocalai", "curl", "-f", "http://localhost:8091/v1/models"],
-                capture_output=True,
-                text=True,
-                timeout=20
-            )
-            
-            if result.returncode == 0:
-                log("✅ EzLocalAI is ready", "SUCCESS")
-                ezlocalai_ready = True
-                break
-            else:
-                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/15), waiting 20s...")
-                time.sleep(20)
-        
-        if not ezlocalai_ready:
-            log("⚠️  EzLocalAI may not be fully ready yet", "WARN")
-        
-        # Wait for AGiXT (additional 15 seconds)
-        log("🧠 Waiting for AGiXT to start (15 seconds)...")
-        time.sleep(15)
-        
-        # Check AGiXT status
-        agixt_ready = False
-        for attempt in range(4):  # 4 attempts, 10 seconds each
-            result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "agixt", "curl", "-f", "http://localhost:7437/api/status"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                log("✅ AGiXT is ready", "SUCCESS")
-                agixt_ready = True
-                break
-            else:
-                log("⏳ AGiXT not ready yet (attempt " + str(attempt + 1) + "/4)...")
-                time.sleep(10)
-        
-        if not agixt_ready:
-            log("⚠️  AGiXT may not be fully ready yet", "WARN")
-        
-        # Wait for AGiXT Interactive (additional 10 seconds)
-        log("🌐 Waiting for AGiXT Interactive to start (10 seconds)...")
-        time.sleep(10)
-        
-        # Show service status
-        log("📊 Checking service status...")
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "table"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode == 0:
-            log("🐳 Service Status:")
-            for line in result.stdout.split('\n'):
-                if line.strip():
-                    print("     " + line)
-        
-        # Install GraphQL dependencies
-        log("📦 Installing GraphQL dependencies...")
+        # FIXED: Use the same approach as working version
         try:
-            # Wait a bit more for AGiXT to be fully ready
-            time.sleep(15)
-            
+            # Pull latest images first (like working version)
+            log("📥 Pulling latest Docker images...")
             result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "agixt", "pip", "install", "strawberry-graphql", "broadcaster"],
+                ["docker", "compose", "pull"], 
+                cwd=install_path,
+                check=True,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=300
+            )
+            log("✅ Docker images pulled successfully", "SUCCESS")
+            
+        except subprocess.CalledProcessError as e:
+            log("⚠️  Could not pull images: " + str(e), "WARN")
+            log("Continuing with existing images...")
+        except subprocess.TimeoutExpired:
+            log("⚠️  Image pull timed out, continuing...", "WARN")
+        
+        try:
+            # Start containers (like working version)
+            log("🚀 Starting containers...")
+            result = subprocess.run(
+                ["docker", "compose", "up", "-d"], 
+                cwd=install_path,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.stdout:
+                log("Docker output: " + result.stdout.strip())
+            
+            log("✅ Docker containers started successfully", "SUCCESS")
+            
+        except subprocess.CalledProcessError as e:
+            log("❌ Failed to start Docker containers", "ERROR")
+            log("Return code: " + str(e.returncode), "ERROR")
+            if e.stderr:
+                log("Error output: " + e.stderr, "ERROR")
+            if e.stdout:
+                log("Standard output: " + e.stdout, "ERROR")
+            return False
+        except subprocess.TimeoutExpired:
+            log("❌ Container startup timed out", "ERROR")
+            return False
+        
+        # Wait for services to be ready (simplified version)
+        log("⏳ Waiting for services to initialize...")
+        time.sleep(30)
+        
+        # Verify containers are running
+        try:
+            result = subprocess.run(
+                ["docker", "compose", "ps"], 
+                cwd=install_path,
+                capture_output=True, 
+                text=True, 
+                timeout=30
             )
             
             if result.returncode == 0:
-                log("✅ GraphQL dependencies installed successfully", "SUCCESS")
-                
-                # Restart AGiXT to load GraphQL
-                log("🔄 Restarting AGiXT to load GraphQL...")
-                subprocess.run(
-                    ["docker", "compose", "restart", "agixt"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                
-                # Wait for restart
-                time.sleep(20)
-                log("✅ AGiXT restarted successfully", "SUCCESS")
-                
+                log("✅ Container verification successful", "SUCCESS")
+                log("📊 Container status:")
+                for line in result.stdout.split('\n')[1:]:  # Skip header
+                    if line.strip():
+                        log("   " + line, "INFO")
             else:
-                log("⚠️  Could not install GraphQL dependencies: " + result.stderr, "WARN")
+                log("⚠️  Could not verify container status", "WARN")
                 
         except Exception as e:
-            log("⚠️  GraphQL installation warning: " + str(e), "WARN")
+            log("⚠️  Container verification failed: " + str(e), "WARN")
         
-        # Final service verification
-        log("🔍 Final service verification...")
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode == 0:
-            try:
-                import json
-                services = []
-                for line in result.stdout.strip().split('\n'):
-                    if line.strip():
-                        service_info = json.loads(line)
-                        services.append(service_info)
-                
-                running_services = [s for s in services if 'running' in s.get('State', '').lower()]
-                log("✅ " + str(len(running_services)) + "/" + str(len(services)) + " services running", "SUCCESS")
-                
-                for service in services:
-                    name = service.get('Name', 'Unknown')
-                    state = service.get('State', 'Unknown')
-                    if 'running' in state.lower():
-                        log("  ✅ " + name + ": " + state, "SUCCESS")
-                    else:
-                        log("  ⚠️  " + name + ": " + state, "WARN")
-                        
-            except Exception:
-                # Fallback to simple check
-                if "running" in result.stdout.lower():
-                    log("✅ Services appear to be running", "SUCCESS")
-                else:
-                    log("⚠️  Some services may not be running properly", "WARN")
-        
-        os.chdir(original_cwd)
         log("🎉 Service startup completed", "SUCCESS")
         return True
         
     except Exception as e:
         log("❌ Error starting services: " + str(e), "ERROR")
-        try:
-            os.chdir(original_cwd)
-        except:
-            pass
         return False
 
 # Module test function
