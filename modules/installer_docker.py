@@ -26,8 +26,10 @@ def generate_all_variables(config):
         all_vars['AGIXT_API_KEY'] = generate_secure_api_key()
         log("✅ Generated AGIXT_API_KEY")
     
-    # Auto-generate EZLOCALAI_API_KEY (can be same as AGIXT_API_KEY)
-    all_vars['EZLOCALAI_API_KEY'] = all_vars['AGIXT_API_KEY']
+    # CRITICAL FIX 1: Generate EZLOCALAI_API_KEY for authentication
+    if 'EZLOCALAI_API_KEY' not in all_vars:
+        all_vars['EZLOCALAI_API_KEY'] = generate_secure_api_key()
+        log("✅ Generated EZLOCALAI_API_KEY")
     
     # === AGIXT BACKEND VARIABLES (from AGiXT source) ===
     agixt_defaults = {
@@ -231,7 +233,8 @@ def create_configuration(install_path, config):
             "voices",          # EzLocalAI voices
             "hf",             # HuggingFace cache
             "whispercpp",     # Whisper models
-            "xttsv2_2.0.2"    # TTS models
+            "xttsv2_2.0.2",   # TTS models
+            "conversations"   # CRITICAL FIX 2: Add conversations directory
         ]
         
         for directory in directories:
@@ -362,6 +365,7 @@ services:
     volumes:
       - ./models:/agixt/models
       - ./WORKSPACE:/agixt/WORKSPACE
+      - ./conversations:/agixt/conversations
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - agixt-network
