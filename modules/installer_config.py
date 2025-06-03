@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Configuration Module
-======================================
+AGiXT Installer - Configuration Module (Updated for Public Repo)
+================================================================
 
 Handles loading and parsing configuration from GitHub repository.
-This module manages the agixt.config file and validates all settings.
+Updated to work with public repositories without authentication.
 """
 
 import urllib.request
 import urllib.error
 from installer_utils import log
 
-def load_config_from_github(github_token):
-    """Load configuration from GitHub agixt.config file using Contents API"""
+def load_config_from_github(github_token=None):
+    """Load configuration from GitHub agixt.config file - works with public repos"""
     config = {}
     
-    log("📋 Loading configuration from GitHub repository...")
+    log("📋 Loading configuration from public GitHub repository...")
     try:
         config_files = [
             "agixt.config",
@@ -25,15 +25,19 @@ def load_config_from_github(github_token):
         
         for config_file in config_files:
             try:
-                api_url = "https://api.github.com/repos/mocher01/agixt-configs/contents/" + config_file
+                # Use raw content URL for public repositories
+                raw_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/" + config_file
                 
-                req = urllib.request.Request(api_url)
-                req.add_header('Authorization', 'token ' + github_token)
-                req.add_header('Accept', 'application/vnd.github.v3.raw')
+                req = urllib.request.Request(raw_url)
+                req.add_header('User-Agent', 'AGiXT-Installer/1.6')
                 
-                log("📥 Trying to fetch " + config_file + " from GitHub API...")
+                # Only add authorization if token is provided
+                if github_token:
+                    req.add_header('Authorization', 'token ' + github_token)
                 
-                with urllib.request.urlopen(req) as response:
+                log("📥 Trying to fetch " + config_file + " from GitHub...")
+                
+                with urllib.request.urlopen(req, timeout=30) as response:
                     content = response.read().decode('utf-8')
                     
                     log("✅ Successfully downloaded config from: " + config_file, "SUCCESS")
@@ -65,7 +69,7 @@ def load_config_from_github(github_token):
                         f.write(content)
                     log("💾 Configuration saved locally as agixt.config", "SUCCESS")
                     
-                    # Validate required keys (using MODEL_NAME instead of MODEL_HF_NAME)
+                    # Validate required keys
                     required_keys = [
                         'AGIXT_VERSION', 'MODEL_NAME', 'HUGGINGFACE_TOKEN',
                         'INSTALL_FOLDER_PREFIX', 'INSTALL_BASE_PATH'
