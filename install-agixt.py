@@ -24,7 +24,7 @@ def run_command(command, timeout=60):
     except:
         return False
 
-def download_and_run_post_install_tests(install_path, skip_tests=False):
+def download_and_run_post_install_tests(install_path, skip_tests=False, github_token=None):
     """Download and run post-installation tests"""
     
     if skip_tests:
@@ -34,12 +34,14 @@ def download_and_run_post_install_tests(install_path, skip_tests=False):
     try:
         log("📋 Downloading post-installation tests...")
         
-        # Download post-install tests
+        # Download post-install tests with authentication
         test_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/post-install-tests.py"
         test_content = ""
         
         req = urllib.request.Request(test_url)
-        req.add_header('User-Agent', 'AGiXT-Installer/1.6')
+        req.add_header('User-Agent', 'AGiXT-Installer/1.7')
+        if github_token:
+            req.add_header('Authorization', 'token ' + github_token)
         
         with urllib.request.urlopen(req, timeout=30) as response:
             test_content = response.read().decode('utf-8')
@@ -199,11 +201,13 @@ def comprehensive_cleanup():
     
     return True
 
-def download_file(url, target_path):
-    """Download file from public repository (no authentication needed)"""
+def download_file(url, target_path, github_token=None):
+    """Download file with authentication for private repository"""
     try:
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'AGiXT-Installer/1.6')
+        req.add_header('User-Agent', 'AGiXT-Installer/1.7')
+        if github_token:
+            req.add_header('Authorization', 'token ' + github_token)
         
         with urllib.request.urlopen(req, timeout=30) as response:
             with open(target_path, 'wb') as f:
@@ -215,29 +219,48 @@ def download_file(url, target_path):
         return False
 
 def main():
-    log("🚀 AGiXT Installer v1.6 - FULL BOOTSTRAPPER WITH CLEANUP")
-    log("🔧 Professional installation with comprehensive cleanup")
-    log("🆕 Public repository version - no GitHub token required")
+    log("🚀 AGiXT Installer v1.7 - ENTERPRISE EDITION")
+    log("🔧 Optimized for 16GB servers with enhanced chat experience")
+    log("🔒 Private repository with GitHub token authentication")
     
     # Parse command line arguments
-    config_name = "proxy"
+    config_name = "agixt"  # Default config name
+    github_token = None
     skip_cleanup = False
-    skip_tests = False  # ADDED: New parameter for post-install tests
+    skip_tests = False
     
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             if arg == "--no-cleanup" or arg == "--skip-cleanup":
                 skip_cleanup = True
                 log("🚫 Cleanup disabled via command line flag")
-            elif arg == "--skip-tests" or arg == "--no-tests":  # ADDED: Skip tests option
+            elif arg == "--skip-tests" or arg == "--no-tests":
                 skip_tests = True
                 log("🚫 Post-installation tests disabled via command line flag")
+            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
+                github_token = arg
+                log("🔑 GitHub token provided")
             elif not arg.startswith("-"):
                 config_name = arg
     
+    # Validate required GitHub token
+    if not github_token:
+        log("❌ GitHub token required for private repository access", "ERROR")
+        log("", "ERROR")
+        log("📋 Usage:", "ERROR")
+        log("  python3 install-agixt.py <config_name> <github_token> [options]", "ERROR")
+        log("", "ERROR")
+        log("📝 Examples:", "ERROR")
+        log("  python3 install-agixt.py agixt github_pat_11AAAA...", "ERROR")
+        log("  python3 install-agixt.py agixt github_pat_11AAAA... --skip-tests", "ERROR")
+        log("", "ERROR")
+        log("🔑 Get your GitHub token at: https://github.com/settings/tokens", "ERROR")
+        log("   Required permissions: repo (Full control of private repositories)", "ERROR")
+        sys.exit(1)
+    
     log("🔧 Configuration: " + config_name)
     log("🗑️  Skip cleanup: " + str(skip_cleanup))
-    log("🧪 Skip tests: " + str(skip_tests))  # ADDED: Log skip tests status
+    log("🧪 Skip tests: " + str(skip_tests))
     
     log("🔍 CLEANUP PHASE STARTING...")
     
@@ -266,8 +289,8 @@ def main():
         
         base_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/modules"
         
-        # Download all modules
-        log("📦 Downloading installer modules from public repository...")
+        # Download all modules with authentication
+        log("📦 Downloading installer modules from private repository...")
         downloaded_modules = []
         
         for module in modules:
@@ -275,7 +298,7 @@ def main():
             module_path = os.path.join(temp_dir, module)
             
             log("📥 Downloading " + module + "...")
-            if download_file(module_url, module_path):
+            if download_file(module_url, module_path, github_token):
                 log("✅ Downloaded " + module, "SUCCESS")
                 downloaded_modules.append(module)
             else:
@@ -287,6 +310,7 @@ def main():
         # Check if we have enough modules to proceed
         if len(downloaded_modules) == 0:
             log("❌ No modules downloaded - cannot proceed", "ERROR")
+            log("🔑 Please check your GitHub token permissions", "ERROR")
             sys.exit(1)
         
         if "installer_core.py" not in downloaded_modules:
@@ -308,14 +332,14 @@ def main():
             import installer_core
             log("✅ Modules loaded successfully", "SUCCESS")
             
-            # Run the main installer (no GitHub token needed)
+            # Run the main installer with GitHub token
             log("🚀 Starting modular installation...")
-            success = installer_core.run_installation(config_name, None, skip_cleanup)
+            success = installer_core.run_installation(config_name, github_token, skip_cleanup)
             
             if success:
                 log("🎉 AGiXT installation completed successfully!", "SUCCESS")
                 
-                # ADDED: Run post-installation tests
+                # Run post-installation tests
                 log("")
                 log("🧪 POST-INSTALLATION TESTING PHASE...")
                 
@@ -327,7 +351,7 @@ def main():
                     for base_path in base_paths:
                         if os.path.exists(base_path):
                             for item in os.listdir(base_path):
-                                if 'agixt' in item.lower() and 'v1.6' in item:
+                                if 'agixt' in item.lower() and ('v1.7' in item or 'v1.6' in item):
                                     candidate_path = os.path.join(base_path, item)
                                     if os.path.isdir(candidate_path):
                                         install_path = candidate_path
@@ -336,13 +360,20 @@ def main():
                                 break
                     
                     if not install_path:
-                        # Fallback to common path
-                        install_path = "/var/apps/agixt-v1.6-ezlocolai-universal"
+                        # Fallback to common paths
+                        fallback_paths = [
+                            "/var/apps/agixt-v1.7-optimized-universal",
+                            "/var/apps/agixt-v1.6-ezlocolai-universal"
+                        ]
+                        for path in fallback_paths:
+                            if os.path.exists(path):
+                                install_path = path
+                                break
                     
                     log(f"📁 Detected installation path: {install_path}")
                     
                     # Run post-installation tests
-                    test_success = download_and_run_post_install_tests(install_path, skip_tests)
+                    test_success = download_and_run_post_install_tests(install_path, skip_tests, github_token)
                     
                     if test_success:
                         log("✅ Post-installation tests completed successfully!", "SUCCESS")
