@@ -273,6 +273,9 @@ def start_services(install_path, config):
         log(f"❌ Error starting services: {e}", "ERROR")
         return False
 
+# Alias for compatibility with enhanced installer_core.py
+start_services_with_debugging = start_services
+
 def test_module():
     """Test this corrected module"""
     log("🧪 Testing corrected installer_docker module...")
