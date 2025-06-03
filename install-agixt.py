@@ -24,6 +24,51 @@ def run_command(command, timeout=60):
     except:
         return False
 
+def download_and_run_post_install_tests(install_path, skip_tests=False):
+    """Download and run post-installation tests"""
+    
+    if skip_tests:
+        log("⏭️  Post-installation tests skipped by user option")
+        return True
+        
+    try:
+        log("📋 Downloading post-installation tests...")
+        
+        # Download post-install tests
+        test_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/post-install-tests.py"
+        test_content = ""
+        
+        req = urllib.request.Request(test_url)
+        req.add_header('User-Agent', 'AGiXT-Installer/1.6')
+        
+        with urllib.request.urlopen(req, timeout=30) as response:
+            test_content = response.read().decode('utf-8')
+        
+        if not test_content:
+            log("⚠️  Could not download post-install tests", "WARN")
+            return False
+        
+        # Write to temporary file and execute
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(test_content)
+            temp_test_path = f.name
+        
+        log("🧪 Running post-installation tests...")
+        
+        # Execute the tests (don't capture output, let it stream)
+        result = subprocess.run([
+            'python3', temp_test_path, install_path
+        ], timeout=300)
+        
+        # Clean up
+        os.unlink(temp_test_path)
+        
+        return result.returncode == 0
+        
+    except Exception as e:
+        log(f"⚠️  Post-installation tests failed: {e}", "WARN")
+        return False
+
 def comprehensive_cleanup():
     log("🔍 Scanning for existing AGiXT/EzLocalAI installations...")
     
@@ -177,17 +222,22 @@ def main():
     # Parse command line arguments
     config_name = "proxy"
     skip_cleanup = False
+    skip_tests = False  # ADDED: New parameter for post-install tests
     
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             if arg == "--no-cleanup" or arg == "--skip-cleanup":
                 skip_cleanup = True
                 log("🚫 Cleanup disabled via command line flag")
+            elif arg == "--skip-tests" or arg == "--no-tests":  # ADDED: Skip tests option
+                skip_tests = True
+                log("🚫 Post-installation tests disabled via command line flag")
             elif not arg.startswith("-"):
                 config_name = arg
     
     log("🔧 Configuration: " + config_name)
     log("🗑️  Skip cleanup: " + str(skip_cleanup))
+    log("🧪 Skip tests: " + str(skip_tests))  # ADDED: Log skip tests status
     
     log("🔍 CLEANUP PHASE STARTING...")
     
@@ -264,6 +314,46 @@ def main():
             
             if success:
                 log("🎉 AGiXT installation completed successfully!", "SUCCESS")
+                
+                # ADDED: Run post-installation tests
+                log("")
+                log("🧪 POST-INSTALLATION TESTING PHASE...")
+                
+                # Find the installation path
+                install_path = None
+                try:
+                    # Try to find the installation path
+                    base_paths = ['/var/apps']
+                    for base_path in base_paths:
+                        if os.path.exists(base_path):
+                            for item in os.listdir(base_path):
+                                if 'agixt' in item.lower() and 'v1.6' in item:
+                                    candidate_path = os.path.join(base_path, item)
+                                    if os.path.isdir(candidate_path):
+                                        install_path = candidate_path
+                                        break
+                            if install_path:
+                                break
+                    
+                    if not install_path:
+                        # Fallback to common path
+                        install_path = "/var/apps/agixt-v1.6-ezlocolai-universal"
+                    
+                    log(f"📁 Detected installation path: {install_path}")
+                    
+                    # Run post-installation tests
+                    test_success = download_and_run_post_install_tests(install_path, skip_tests)
+                    
+                    if test_success:
+                        log("✅ Post-installation tests completed successfully!", "SUCCESS")
+                    else:
+                        log("⚠️  Post-installation tests completed with warnings", "WARN")
+                        log("ℹ️  Installation is functional but some tests failed", "INFO")
+                
+                except Exception as e:
+                    log(f"⚠️  Could not run post-installation tests: {e}", "WARN")
+                    log("ℹ️  You can run tests manually later if needed", "INFO")
+                
             else:
                 log("❌ Installation failed", "ERROR")
                 sys.exit(1)
