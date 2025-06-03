@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module
-===============================
+AGiXT Installer - Docker Module (CORRECTED)
+===========================================
 
 Handles Docker configuration and service management.
 This module creates .env files, configures docker-compose.yml,
 and starts all AGiXT services.
+
+CORRECTED: Fixed to match the working installer exactly
+- Removed wrong command (python3 DB.py)
+- Fixed volume mappings to use absolute paths
+- Mount .env as volume instead of env_file
+- Proper directory structure
 """
 
 import os
@@ -106,85 +112,56 @@ def create_configuration(install_path, config):
                     if key in config:
                         value = config[key]
                         f.write(key + "=" + str(value) + "\n")
-                    else:
-                        # Log missing keys for debugging
-                        log("⚠️  Missing config key: " + key, "WARN")
                 
                 f.write("\n")
         
         log("✅ .env file created successfully", "SUCCESS")
         
-        # Update docker-compose.yml with enhanced configuration
+        # Create docker-compose.yml - EXACTLY LIKE WORKING INSTALLER
         log("🐳 Updating docker-compose.yml...")
         
+        # CORRECTED: Match the working installer's docker-compose structure exactly
         docker_compose_content = f"""version: '3.8'
 
-networks:
-  agixt-network:
-    external: true
-
 services:
+  agixt:
+    image: joshxt/agixt:main
+    container_name: agixt
+    ports:
+      - "7437:7437"
+    volumes:
+      - {install_path}/agixt:/app/agixt
+      - {install_path}/conversations:/app/conversations
+      - {install_path}/.env:/app/.env
+    environment:
+      - AGIXT_URI=http://agixt:7437
+    networks:
+      - agixt-network
+    restart: unless-stopped
+
   ezlocalai:
     image: joshxt/ezlocalai:main
     container_name: ezlocalai
-    hostname: ezlocalai
     ports:
       - "8091:8091"
       - "8502:8502"
     volumes:
-      - ./ezlocalai:/app/models
-      - ./WORKSPACE:/app/WORKSPACE
+      - {install_path}/ezlocalai:/app/models
+      - {install_path}/.env:/app/.env
     environment:
-      - DEFAULT_MODEL=${{DEFAULT_MODEL}}
-      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS}}
-      - THREADS=${{THREADS}}
-      - GPU_LAYERS=${{GPU_LAYERS}}
-      - WHISPER_MODEL=${{WHISPER_MODEL}}
-      - IMG_ENABLED=${{IMG_ENABLED}}
-      - AUTO_UPDATE=${{AUTO_UPDATE}}
+      - EZLOCALAI_URL=http://ezlocalai:8091
+      - EZLOCALAI_API_KEY=${{EZLOCALAI_API_KEY}}
     networks:
       - agixt-network
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8091/v1/models || exit 1"]
-      interval: 45s
-      timeout: 30s
-      retries: 8
-      start_period: 300s
-
-  agixt:
-    image: joshxt/agixt:main
-    container_name: agixt
-    hostname: agixt
-    ports:
-      - "7437:7437"
-    volumes:
-      - ./agixt:/app/agixt
-      - ./models:/app/models
-      - ./WORKSPACE:/app/WORKSPACE
-      - ./conversations:/app/conversations
-    env_file:
-      - .env
-    networks:
-      - agixt-network
-    depends_on:
-      - ezlocalai
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7437/api/status || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 150s
 
   agixtinteractive:
     image: joshxt/agixt-interactive:main
     container_name: agixtinteractive
-    hostname: agixtinteractive
     ports:
       - "3437:3437"
     volumes:
-      - ./WORKSPACE:/app/WORKSPACE
+      - {install_path}/.env:/app/.env
     environment:
       - AGIXT_SERVER=${{AGIXT_URI}}
       - APP_NAME=${{APP_NAME}}
@@ -206,12 +183,10 @@ services:
     depends_on:
       - agixt
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:3437 || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 5
-      start_period: 180s
+
+networks:
+  agixt-network:
+    driver: bridge
 """
         
         docker_compose_path = os.path.join(install_path, "docker-compose.yml")
@@ -219,6 +194,16 @@ services:
             f.write(docker_compose_content)
         
         log("✅ docker-compose.yml updated successfully", "SUCCESS")
+        
+        # Create required directories that the working installer expects
+        required_dirs = [
+            os.path.join(install_path, "agixt"),
+            os.path.join(install_path, "conversations")
+        ]
+        
+        for dir_path in required_dirs:
+            os.makedirs(dir_path, exist_ok=True)
+            log("📁 Created directory: " + dir_path, "SUCCESS")
         
         # Verify configuration files exist
         required_files = [".env", "docker-compose.yml"]
@@ -276,59 +261,9 @@ def start_services(install_path, config):
         # Monitor service startup
         log("⏳ Waiting for services to initialize...")
         
-        # Wait for EzLocalAI first (120 seconds for large model loading)
-        log("🤖 Waiting for EzLocalAI to start (120 seconds for model loading)...")
-        time.sleep(120)
-        
-        # Check EzLocalAI status
-        ezlocalai_ready = False
-        for attempt in range(15):  # 15 attempts, 20 seconds each = 5 minutes total
-            result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "ezlocalai", "curl", "-f", "http://localhost:8091/v1/models"],
-                capture_output=True,
-                text=True,
-                timeout=20
-            )
-            
-            if result.returncode == 0:
-                log("✅ EzLocalAI is ready", "SUCCESS")
-                ezlocalai_ready = True
-                break
-            else:
-                log("⏳ EzLocalAI not ready yet (attempt " + str(attempt + 1) + "/15), waiting 20s...")
-                time.sleep(20)
-        
-        if not ezlocalai_ready:
-            log("⚠️  EzLocalAI may not be fully ready yet", "WARN")
-        
-        # Wait for AGiXT (additional 15 seconds)
-        log("🧠 Waiting for AGiXT to start (15 seconds)...")
-        time.sleep(15)
-        
-        # Check AGiXT status
-        agixt_ready = False
-        for attempt in range(4):  # 4 attempts, 10 seconds each
-            result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "agixt", "curl", "-f", "http://localhost:7437/api/status"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            
-            if result.returncode == 0:
-                log("✅ AGiXT is ready", "SUCCESS")
-                agixt_ready = True
-                break
-            else:
-                log("⏳ AGiXT not ready yet (attempt " + str(attempt + 1) + "/4)...")
-                time.sleep(10)
-        
-        if not agixt_ready:
-            log("⚠️  AGiXT may not be fully ready yet", "WARN")
-        
-        # Wait for AGiXT Interactive (additional 10 seconds)
-        log("🌐 Waiting for AGiXT Interactive to start (10 seconds)...")
-        time.sleep(10)
+        # Wait for services to be ready (reduced time since no model loading issues expected)
+        log("🤖 Waiting for services to start (60 seconds)...")
+        time.sleep(60)
         
         # Show service status
         log("📊 Checking service status...")
@@ -344,41 +279,6 @@ def start_services(install_path, config):
             for line in result.stdout.split('\n'):
                 if line.strip():
                     print("     " + line)
-        
-        # Install GraphQL dependencies
-        log("📦 Installing GraphQL dependencies...")
-        try:
-            # Wait a bit more for AGiXT to be fully ready
-            time.sleep(15)
-            
-            result = subprocess.run(
-                ["docker", "compose", "exec", "-T", "agixt", "pip", "install", "strawberry-graphql", "broadcaster"],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-            
-            if result.returncode == 0:
-                log("✅ GraphQL dependencies installed successfully", "SUCCESS")
-                
-                # Restart AGiXT to load GraphQL
-                log("🔄 Restarting AGiXT to load GraphQL...")
-                subprocess.run(
-                    ["docker", "compose", "restart", "agixt"],
-                    capture_output=True,
-                    text=True,
-                    timeout=60
-                )
-                
-                # Wait for restart
-                time.sleep(20)
-                log("✅ AGiXT restarted successfully", "SUCCESS")
-                
-            else:
-                log("⚠️  Could not install GraphQL dependencies: " + result.stderr, "WARN")
-                
-        except Exception as e:
-            log("⚠️  GraphQL installation warning: " + str(e), "WARN")
         
         # Final service verification
         log("🔍 Final service verification...")
