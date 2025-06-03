@@ -154,11 +154,11 @@ def comprehensive_cleanup():
     
     return True
 
-def download_file(url, target_path, github_token=None):
+def download_file(url, target_path):
+    """Download file from public repository (no authentication needed)"""
     try:
         req = urllib.request.Request(url)
-        if github_token:
-            req.add_header('Authorization', 'token ' + github_token)
+        req.add_header('User-Agent', 'AGiXT-Installer/1.6')
         
         with urllib.request.urlopen(req, timeout=30) as response:
             with open(target_path, 'wb') as f:
@@ -172,11 +172,10 @@ def download_file(url, target_path, github_token=None):
 def main():
     log("🚀 AGiXT Installer v1.6 - FULL BOOTSTRAPPER WITH CLEANUP")
     log("🔧 Professional installation with comprehensive cleanup")
-    log("🆕 This is the NEW version with comprehensive cleanup functionality")
+    log("🆕 Public repository version - no GitHub token required")
     
     # Parse command line arguments
     config_name = "proxy"
-    github_token = None
     skip_cleanup = False
     
     if len(sys.argv) > 1:
@@ -184,15 +183,11 @@ def main():
             if arg == "--no-cleanup" or arg == "--skip-cleanup":
                 skip_cleanup = True
                 log("🚫 Cleanup disabled via command line flag")
-            elif arg.startswith("github_pat_") or arg.startswith("ghp_"):
-                github_token = arg
             elif not arg.startswith("-"):
                 config_name = arg
     
-    if not github_token:
-        log("❌ GitHub token required for installation", "ERROR")
-        log("Usage: script.py proxy github_token [--no-cleanup]", "ERROR")
-        sys.exit(1)
+    log("🔧 Configuration: " + config_name)
+    log("🗑️  Skip cleanup: " + str(skip_cleanup))
     
     log("🔍 CLEANUP PHASE STARTING...")
     
@@ -210,9 +205,9 @@ def main():
     log("📁 Created temporary directory: " + temp_dir)
     
     try:
-        # Define required modules - START WITH UTILS TO TEST DOWNLOAD
+        # Define required modules
         modules = [
-            "installer_utils.py",     # ← Test this first
+            "installer_utils.py",
             "installer_core.py",
             "installer_config.py", 
             "installer_models.py",
@@ -222,7 +217,7 @@ def main():
         base_url = "https://raw.githubusercontent.com/mocher01/agixt-configs/main/modules"
         
         # Download all modules
-        log("📦 Downloading installer modules...")
+        log("📦 Downloading installer modules from public repository...")
         downloaded_modules = []
         
         for module in modules:
@@ -230,7 +225,7 @@ def main():
             module_path = os.path.join(temp_dir, module)
             
             log("📥 Downloading " + module + "...")
-            if download_file(module_url, module_path, github_token):
+            if download_file(module_url, module_path):
                 log("✅ Downloaded " + module, "SUCCESS")
                 downloaded_modules.append(module)
             else:
@@ -263,9 +258,9 @@ def main():
             import installer_core
             log("✅ Modules loaded successfully", "SUCCESS")
             
-            # Run the main installer
+            # Run the main installer (no GitHub token needed)
             log("🚀 Starting modular installation...")
-            success = installer_core.run_installation(config_name, github_token, skip_cleanup)
+            success = installer_core.run_installation(config_name, None, skip_cleanup)
             
             if success:
                 log("🎉 AGiXT installation completed successfully!", "SUCCESS")
@@ -279,8 +274,6 @@ def main():
         except Exception as e:
             log("❌ Installation error: " + str(e), "ERROR")
             sys.exit(1)
-        
-        log("✅ Essential modules available - proceeding with installation")
     
     finally:
         # Clean up temporary directory
