@@ -30,8 +30,8 @@ def create_configuration(install_path, config):
             log("✅ Added missing AGIXT_API_KEY: " + config['AGIXT_API_KEY'][:8] + "...")
         
         # CRITICAL FIX: Set DATABASE_NAME to match working version
-        config['DATABASE_NAME'] = 'agixt'  # NOT models/agixt!
-        log("🔧 FIXED: Set DATABASE_NAME=agixt (like working version)")
+        config['DATABASE_NAME'] = 'models/agixt'  # NOT models/agixt!
+        log("🔧 FIXED: Set DATABASE_NAME=models/agixt)")
         
         # Create directory structure EXACTLY like working version
         log("📁 Creating directory structure like working version...")
@@ -88,8 +88,10 @@ services:
     ports:
       - "7437:7437"
     volumes:
-      - ./agixt:/app/agixt
+      - ./agixt:/agixt/models
+      - ./WORKSPACE:/agixt/WORKSPACE
       - ./conversations:/app/conversations
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./.env:/app/.env
     environment:
       - AGIXT_URI=http://agixt:7437
@@ -148,7 +150,7 @@ services:
         log("  ❌ REMOVED: ./models:/app/models volume", "SUCCESS")
         log("  ✅ KEPT: ./agixt:/app/agixt (database location)", "SUCCESS")
         log("  ✅ KEPT: ./.env:/app/.env direct mapping", "SUCCESS")
-        log("  ✅ FIXED: DATABASE_NAME=agixt (not models/agixt)", "SUCCESS")
+        log("  ✅ FIXED: DATABASE_NAME= models/agixt", "SUCCESS")
         log("  ✅ COPIED: Exact volume structure from working version", "SUCCESS")
         
         # Verify configuration files exist
