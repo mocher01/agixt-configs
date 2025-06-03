@@ -9,6 +9,7 @@ Updated to work with public repositories without authentication.
 
 import urllib.request
 import urllib.error
+import os
 from installer_utils import log
 
 def load_config_from_github(github_token=None):
@@ -64,10 +65,15 @@ def load_config_from_github(github_token=None):
                                 
                             config[key] = value
                     
-                    # Save config locally for reference
-                    with open('agixt.config', 'w') as f:
-                        f.write(content)
-                    log("💾 Configuration saved locally as agixt.config", "SUCCESS")
+                    # Save config in user's home directory for reference
+                    try:
+                        config_path = os.path.expanduser('~/agixt.config')
+                        with open(config_path, 'w') as f:
+                            f.write(content)
+                        log("💾 Configuration saved to: " + config_path, "SUCCESS")
+                    except Exception as e:
+                        log("⚠️  Could not save config file: " + str(e), "WARN")
+                        # Continue anyway since we have the config in memory
                     
                     # Validate required keys
                     required_keys = [
