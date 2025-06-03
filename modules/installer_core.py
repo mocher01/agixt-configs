@@ -222,7 +222,7 @@ def run_enhanced_installation(config_name, github_token, skip_cleanup):
                         log("❌ Install path and config required for this step", "ERROR")
                         return False
                     log("🚀 Starting enhanced service startup with debugging...", "INFO")
-                    if not installer_docker.start_services_with_debugging(install_path, config):
+                    if not installer_docker.start_services(install_path, config):
                         log("❌ Service startup failed", "ERROR") 
                         return False
                     log("✅ Enhanced service startup completed")
