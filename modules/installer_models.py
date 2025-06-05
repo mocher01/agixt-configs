@@ -7,7 +7,7 @@ Handles model discovery, downloading, and architecture setup.
 This module implements GGUF model focus with automatic fallbacks
 and dynamic architecture detection.
 
-FIXED: Places GGUF files directly in ./ezlocalai/ directory for EzLocalAI compatibility
+FIXED: Places GGUF files directly in ./models/ directory for EzLocalAI compatibility
 """
 
 import os
@@ -24,8 +24,27 @@ def get_model_architecture(model_repo, model_name):
     model_lower = model_name.lower()
     repo_lower = model_repo.lower()
     
+    # TinyLlama models (lightest) - ADD SUPPORT FOR TINYLLAMA
+    if "tinyllama" in model_lower or "tinyllama" in repo_lower:
+        return {
+            "architectures": ["LlamaForCausalLM"],
+            "model_type": "llama",
+            "hidden_size": 2048,
+            "num_attention_heads": 32,
+            "num_hidden_layers": 22,
+            "num_key_value_heads": 4,
+            "vocab_size": 32000,
+            "intermediate_size": 5632,
+            "bos_token_id": 1,
+            "eos_token_id": 2,
+            "hidden_act": "silu",
+            "rms_norm_eps": 1e-05,
+            "rope_theta": 10000.0,
+            "max_tokens": 2048
+        }
+    
     # Deepseek models
-    if "deepseek" in model_lower or "deepseek" in repo_lower:
+    elif "deepseek" in model_lower or "deepseek" in repo_lower:
         return {
             "architectures": ["DeepseekForCausalLM"],
             "model_type": "deepseek",
@@ -126,7 +145,7 @@ def get_model_config(model_name, hf_token):
     
     # Priority repositories for GGUF models
     gguf_repos = [
-        "TheBloke/" + model_name.replace(' ', '-').replace('/', '-') + "-GGUF"
+        "TheBloke/" + model_name.replace(' ', '-').replace('/', '-') + "-GGUF",
         "microsoft/" + model_name.split('/')[-1] + "-gguf",
         "bartowski/" + model_name.split('/')[-1] + "-GGUF",
         "TheBloke/" + model_name.split('/')[-1] + "-GGUF"
@@ -134,6 +153,7 @@ def get_model_config(model_name, hf_token):
     
     # Fallback GGUF models if original not found
     fallback_models = [
+        "TinyLlama/TinyLlama-1.1B-Chat-v1.0-GGUF",
         "TheBloke/Llama-2-7B-Chat-GGUF",
         "TheBloke/Mistral-7B-Instruct-v0.1-GGUF", 
         "microsoft/phi-2-gguf",
@@ -269,12 +289,12 @@ def setup_models(install_path, config):
         log("🏗️  Using " + architecture['model_type'] + " architecture for " + final_model_name)
         
         # FIXED: Create direct file structure for EzLocalAI compatibility
-        ezlocalai_dir = os.path.join(install_path, "ezlocalai")
-        os.makedirs(ezlocalai_dir, exist_ok=True)
+        models_dir = os.path.join(install_path, "models")
+        os.makedirs(models_dir, exist_ok=True)
         
-        # FIXED: Place GGUF file directly in ezlocalai directory (not in subdirectory)
+        # FIXED: Place GGUF file directly in models directory (not in subdirectory)
         model_filename = model_config['model_file']
-        target_model_path = os.path.join(ezlocalai_dir, model_filename)
+        target_model_path = os.path.join(models_dir, model_filename)
         
         log("📁 EzLocalAI will find model at: /app/models/" + model_filename, "SUCCESS")
         log("📁 Host path: " + target_model_path)
@@ -313,7 +333,7 @@ def setup_models(install_path, config):
         log("🔧 Creating companion configuration files...")
         
         # Create config.json with DYNAMIC architecture
-        config_json_path = os.path.join(ezlocalai_dir, model_filename.replace('.gguf', '.config.json'))
+        config_json_path = os.path.join(models_dir, model_filename.replace('.gguf', '.config.json'))
         model_config_json = {
             "architectures": architecture["architectures"],
             "attention_dropout": 0.0,
@@ -342,17 +362,17 @@ def setup_models(install_path, config):
         log("✅ Created " + os.path.basename(config_json_path) + " with " + architecture['model_type'] + " architecture", "SUCCESS")
         
         # Create tokenizer_config.json with DYNAMIC values
-        tokenizer_config_path = os.path.join(ezlocalai_dir, model_filename.replace('.gguf', '.tokenizer.json'))
+        tokenizer_config_path = os.path.join(models_dir, model_filename.replace('.gguf', '.tokenizer.json'))
         
         # Use dynamic token IDs based on model type
         if architecture["model_type"] == "deepseek":
             tokenizer_config = {
                 "added_tokens_decoder": {
-                    "100000": {"content": "<｜begin▁of▁sentence｜>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True},
-                    "100001": {"content": "<｜end▁of▁sentence｜>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True}
+                    "100000": {"content": "<￤begin￤of￤sentence￤>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True},
+                    "100001": {"content": "<￤end￤of￤sentence￤>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True}
                 },
-                "bos_token": "<｜begin▁of▁sentence｜>",
-                "eos_token": "<｜end▁of▁sentence｜>",
+                "bos_token": "<￤begin￤of￤sentence￤>",
+                "eos_token": "<￤end￤of￤sentence￤>",
                 "model_max_length": architecture["max_tokens"],
                 "tokenizer_class": "LlamaTokenizer"
             }
