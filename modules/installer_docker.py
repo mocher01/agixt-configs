@@ -172,14 +172,18 @@ def generate_all_variables(config):
         # Set DEFAULT_MODEL for EzLocalAI
         all_vars['DEFAULT_MODEL'] = all_vars.get('FINAL_MODEL_FILE', model_name)
         
-        # Deduce max tokens based on model
-        if 'deepseek' in model_name.lower():
+        # FIXED: Deduce max tokens based on model (with TinyLlama support)
+        model_lower = model_name.lower()
+        if 'tinyllama' in model_lower or '1.1b' in model_lower:
+            all_vars['LLM_MAX_TOKENS'] = '2048'
+            all_vars['EZLOCALAI_MAX_TOKENS'] = '2048'
+        elif 'deepseek' in model_lower:
             all_vars['LLM_MAX_TOKENS'] = '8192'
             all_vars['EZLOCALAI_MAX_TOKENS'] = '8192'
-        elif 'llama' in model_name.lower():
+        elif 'llama' in model_lower:
             all_vars['LLM_MAX_TOKENS'] = '4096'
             all_vars['EZLOCALAI_MAX_TOKENS'] = '4096'
-        elif 'phi' in model_name.lower():
+        elif 'phi' in model_lower:
             all_vars['LLM_MAX_TOKENS'] = '2048'
             all_vars['EZLOCALAI_MAX_TOKENS'] = '2048'
         else:
