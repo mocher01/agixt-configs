@@ -170,7 +170,7 @@ def generate_all_variables(config):
     model_name = all_vars.get('MODEL_NAME', all_vars.get('DEFAULT_MODEL', ''))
     if model_name:
         # Set DEFAULT_MODEL for EzLocalAI
-        all_vars['DEFAULT_MODEL'] = model_name
+        all_vars['DEFAULT_MODEL'] = all_vars.get('FINAL_MODEL_FILE', model_name)
         
         # Deduce max tokens based on model
         if 'deepseek' in model_name.lower():
