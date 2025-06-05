@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Models Module
+AGiXT Installer - Models Module (CORRECTED for EzLocalAI)
 =======================================
 
 Handles model discovery, downloading, and architecture setup.
@@ -8,6 +8,8 @@ This module implements GGUF model focus with automatic fallbacks
 and dynamic architecture detection.
 
 FIXED: Places GGUF files directly in ./models/ directory for EzLocalAI compatibility
+FIXED: Sets DEFAULT_MODEL to HuggingFace repo path, not filename
+FIXED: Removes unnecessary config file generation
 """
 
 import os
@@ -24,27 +26,8 @@ def get_model_architecture(model_repo, model_name):
     model_lower = model_name.lower()
     repo_lower = model_repo.lower()
     
-    # TinyLlama models (lightest) - ADD SUPPORT FOR TINYLLAMA
-    if "tinyllama" in model_lower or "tinyllama" in repo_lower:
-        return {
-            "architectures": ["LlamaForCausalLM"],
-            "model_type": "llama",
-            "hidden_size": 2048,
-            "num_attention_heads": 32,
-            "num_hidden_layers": 22,
-            "num_key_value_heads": 4,
-            "vocab_size": 32000,
-            "intermediate_size": 5632,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-05,
-            "rope_theta": 10000.0,
-            "max_tokens": 2048
-        }
-    
     # Deepseek models
-    elif "deepseek" in model_lower or "deepseek" in repo_lower:
+    if "deepseek" in model_lower or "deepseek" in repo_lower:
         return {
             "architectures": ["DeepseekForCausalLM"],
             "model_type": "deepseek",
@@ -145,7 +128,7 @@ def get_model_config(model_name, hf_token):
     
     # Priority repositories for GGUF models
     gguf_repos = [
-        "TheBloke/" + model_name.replace(' ', '-').replace('/', '-') + "-GGUF",
+        "TheBloke/" + model_name.replace('/', '-') + "-GGUF",
         "microsoft/" + model_name.split('/')[-1] + "-gguf",
         "bartowski/" + model_name.split('/')[-1] + "-GGUF",
         "TheBloke/" + model_name.split('/')[-1] + "-GGUF"
@@ -153,7 +136,6 @@ def get_model_config(model_name, hf_token):
     
     # Fallback GGUF models if original not found
     fallback_models = [
-        "TinyLlama/TinyLlama-1.1B-Chat-v1.0-GGUF",
         "TheBloke/Llama-2-7B-Chat-GGUF",
         "TheBloke/Mistral-7B-Instruct-v0.1-GGUF", 
         "microsoft/phi-2-gguf",
@@ -288,11 +270,11 @@ def setup_models(install_path, config):
         architecture = get_model_architecture(model_repo, final_model_name)
         log("🏗️  Using " + architecture['model_type'] + " architecture for " + final_model_name)
         
-        # FIXED: Create direct file structure for EzLocalAI compatibility
-        models_dir = os.path.join(install_path, "models")
+        # FIXED: Create proper directory structure for EzLocalAI compatibility
+        models_dir = os.path.join(install_path, "models")  # Must be "models", not "ezlocalai"
         os.makedirs(models_dir, exist_ok=True)
         
-        # FIXED: Place GGUF file directly in models directory (not in subdirectory)
+        # FIXED: Place GGUF file directly in models directory
         model_filename = model_config['model_file']
         target_model_path = os.path.join(models_dir, model_filename)
         
@@ -329,76 +311,16 @@ def setup_models(install_path, config):
                 return False
             log("✅ Downloaded " + model_config['model_file'] + " successfully", "SUCCESS")
         
-        # FIXED: Create companion config files in the same directory as GGUF
-        log("🔧 Creating companion configuration files...")
-        
-        # Create config.json with DYNAMIC architecture
-        config_json_path = os.path.join(models_dir, model_filename.replace('.gguf', '.config.json'))
-        model_config_json = {
-            "architectures": architecture["architectures"],
-            "attention_dropout": 0.0,
-            "bos_token_id": architecture["bos_token_id"],
-            "eos_token_id": architecture["eos_token_id"],
-            "hidden_act": architecture["hidden_act"],
-            "hidden_size": architecture["hidden_size"],
-            "initializer_range": 0.02,
-            "intermediate_size": architecture["intermediate_size"],
-            "max_position_embeddings": architecture["max_tokens"],
-            "model_type": architecture["model_type"],
-            "num_attention_heads": architecture["num_attention_heads"],
-            "num_hidden_layers": architecture["num_hidden_layers"],
-            "num_key_value_heads": architecture["num_key_value_heads"],
-            "rms_norm_eps": architecture["rms_norm_eps"],
-            "rope_theta": architecture["rope_theta"],
-            "tie_word_embeddings": False,
-            "torch_dtype": "bfloat16",
-            "transformers_version": "4.37.0",
-            "use_cache": True,
-            "vocab_size": architecture["vocab_size"]
-        }
-        
-        with open(config_json_path, 'w') as f:
-            json.dump(model_config_json, f, indent=2)
-        log("✅ Created " + os.path.basename(config_json_path) + " with " + architecture['model_type'] + " architecture", "SUCCESS")
-        
-        # Create tokenizer_config.json with DYNAMIC values
-        tokenizer_config_path = os.path.join(models_dir, model_filename.replace('.gguf', '.tokenizer.json'))
-        
-        # Use dynamic token IDs based on model type
-        if architecture["model_type"] == "deepseek":
-            tokenizer_config = {
-                "added_tokens_decoder": {
-                    "100000": {"content": "<￤begin￤of￤sentence￤>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True},
-                    "100001": {"content": "<￤end￤of￤sentence￤>", "lstrip": False, "normalized": False, "rstrip": False, "single_word": False, "special": True}
-                },
-                "bos_token": "<￤begin￤of￤sentence￤>",
-                "eos_token": "<￤end￤of￤sentence￤>",
-                "model_max_length": architecture["max_tokens"],
-                "tokenizer_class": "LlamaTokenizer"
-            }
-        else:
-            # Standard format for Llama/Mistral/Phi
-            tokenizer_config = {
-                "bos_token": "<s>",
-                "eos_token": "</s>",
-                "model_max_length": architecture["max_tokens"],
-                "tokenizer_class": "LlamaTokenizer"
-            }
-        
-        with open(tokenizer_config_path, 'w') as f:
-            json.dump(tokenizer_config, f, indent=2)
-        log("✅ Created " + os.path.basename(tokenizer_config_path) + " for " + architecture['model_type'] + " model", "SUCCESS")
-        
         # Set proper permissions
         if os.path.exists(target_model_path):
             os.chmod(target_model_path, 0o644)
             log("🔒 Model permissions set", "SUCCESS")
         
-        # FIXED: Update config with direct model filename (not directory name)
-        config['FINAL_MODEL_NAME'] = model_filename  # Use actual filename
-        config['FINAL_MODEL_FILE'] = model_filename
-        config['DEFAULT_MODEL'] = model_filename     # EzLocalAI expects filename
-        config['EZLOCALAI_MODEL'] = model_filename   # EzLocalAI expects filename
+        # FIXED: Update config with HuggingFace repo path for EzLocalAI (not filename)
+        config['FINAL_MODEL_NAME'] = model_filename  # Keep for info/logging
+        config['FINAL_MODEL_FILE'] = model_filename  # Keep for info/logging
+        config['DEFAULT_MODEL'] = model_repo  # FIXED: EzLocalAI expects HuggingFace repo path
+        config['EZLOCALAI_MODEL'] = model_repo  # FIXED: EzLocalAI expects HuggingFace repo path
         config['EZLOCALAI_MAX_TOKENS'] = str(architecture["max_tokens"])
         config['LLM_MAX_TOKENS'] = str(architecture["max_tokens"])
         
@@ -417,6 +339,7 @@ def setup_models(install_path, config):
             log("✅ Model setup complete: " + model_filename + " (" + str(round(final_size, 1)) + "GB)", "SUCCESS")
             log("🏗️  Architecture: " + architecture['model_type'] + " (" + str(architecture['hidden_size']) + "d)", "SUCCESS")
             log("🎯 EzLocalAI will access: /app/models/" + model_filename, "SUCCESS")
+            log("🎯 DEFAULT_MODEL set to: " + model_repo + " (HuggingFace repo path)", "SUCCESS")
             return True
         else:
             log("❌ Model setup failed", "ERROR")
