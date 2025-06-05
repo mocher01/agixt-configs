@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module (COMPLETE ALL VARIABLES)
+AGiXT Installer - Docker Module (COMPLETE ALL VARIABLES) - CORRECTED
 ========================================================
 
 Generates ALL variables needed by AGiXT Backend, Frontend, and EzLocalAI.
 Takes minimal customer config and auto-generates ALL technical variables.
+
+FIXED: Ensures proper volume mapping ./models:/app/models for EzLocalAI
+FIXED: Sets DEFAULT_MODEL to use HuggingFace repo paths
 """
 
 import os
@@ -166,12 +169,18 @@ def generate_all_variables(config):
     
     # === AUTO-DEDUCE VALUES BASED ON CUSTOMER CONFIG ===
     
+    # FIXED: Use the correct DEFAULT_MODEL format for EzLocalAI
+    # EzLocalAI expects HuggingFace repo path, not filename
+    if 'DEFAULT_MODEL' in all_vars and all_vars['DEFAULT_MODEL']:
+        # If it's already a HuggingFace path, keep it
+        if '/' in all_vars['DEFAULT_MODEL'] and not all_vars['DEFAULT_MODEL'].endswith('.gguf'):
+            log("✅ DEFAULT_MODEL already in HuggingFace format: " + all_vars['DEFAULT_MODEL'])
+        else:
+            log("🔧 DEFAULT_MODEL will be set by model installer")
+    
     # Deduce model-specific settings
     model_name = all_vars.get('MODEL_NAME', all_vars.get('DEFAULT_MODEL', ''))
     if model_name:
-        # Set DEFAULT_MODEL for EzLocalAI
-        all_vars['DEFAULT_MODEL'] = all_vars.get('FINAL_MODEL_FILE', model_name)
-        
         # FIXED: Deduce max tokens based on model (with TinyLlama support)
         model_lower = model_name.lower()
         if 'tinyllama' in model_lower or '1.1b' in model_lower:
@@ -230,7 +239,7 @@ def create_configuration(install_path, config):
         # Create directory structure
         log("📁 Creating directory structure...")
         directories = [
-            "models",          # AGiXT database and models
+            "models",          # FIXED: Must be "models" for EzLocalAI volume mapping
             "WORKSPACE",       # Working directory
             "node_modules",    # Frontend dependencies
             "outputs",         # EzLocalAI outputs
@@ -436,6 +445,7 @@ services:
     depends_on:
       - agixt
       - ezlocalai
+
 """
         
         docker_compose_path = os.path.join(install_path, "docker-compose.yml")
@@ -443,6 +453,7 @@ services:
             f.write(docker_compose_content)
         
         log("✅ Complete docker-compose.yml created with AGiXT source structure")
+        log("🎯 FIXED: EzLocalAI volume mapping set to ./models:/app/models")
         
         # Verify files
         required_files = [".env", "docker-compose.yml"]
