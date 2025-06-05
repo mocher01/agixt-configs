@@ -126,7 +126,7 @@ def get_model_config(model_name, hf_token):
     
     # Priority repositories for GGUF models
     gguf_repos = [
-        "TheBloke/" + model_name.replace('/', '-') + "-GGUF",
+        "TheBloke/" + model_name.replace(' ', '-').replace('/', '-') + "-GGUF"
         "microsoft/" + model_name.split('/')[-1] + "-gguf",
         "bartowski/" + model_name.split('/')[-1] + "-GGUF",
         "TheBloke/" + model_name.split('/')[-1] + "-GGUF"
