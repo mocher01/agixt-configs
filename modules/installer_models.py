@@ -1,377 +1,188 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Models Module (CORRECTED for EzLocalAI)
-=======================================
+AGiXT Installer - Models Module (FIXED - Simplified Approach)
+============================================================
 
-Handles model discovery, downloading, and architecture setup.
-This module implements GGUF model focus with automatic fallbacks
-and dynamic architecture detection.
+STRATEGY: Let EzLocalAI handle model downloads and management.
+We just map user choices to HuggingFace repo paths and let EzLocalAI do its job.
 
-FIXED: Places GGUF files directly in ./models/ directory for EzLocalAI compatibility
-FIXED: Sets DEFAULT_MODEL to HuggingFace repo path, not filename
-FIXED: Removes unnecessary config file generation
+REMOVED: Manual GGUF downloads, config file creation, complex file management
+ADDED: Simple repo path mapping and configuration
 """
 
 import os
-import json
-import urllib.request
-import urllib.error
-import shutil
-from datetime import datetime
 from installer_utils import log
 
-def get_model_architecture(model_repo, model_name):
-    """Get correct architecture values based on model type"""
+def get_model_repo_mapping():
+    """Map common model names to working HuggingFace GGUF repositories"""
+    return {
+        # TinyLlama models
+        'tinyllama': 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF',
+        'tinyllama-1.1b': 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF',
+        
+        # Phi models  
+        'phi-2': 'TheBloke/phi-2-dpo-GGUF',
+        'phi2': 'TheBloke/phi-2-dpo-GGUF',
+        
+        # DeepSeek models
+        'deepseek': 'TheBloke/deepseek-coder-1.3b-instruct-GGUF',
+        'deepseek-coder': 'TheBloke/deepseek-coder-1.3b-instruct-GGUF',
+        
+        # Llama models
+        'llama-2-7b': 'TheBloke/Llama-2-7B-Chat-GGUF',
+        'llama2': 'TheBloke/Llama-2-7B-Chat-GGUF',
+        
+        # Mistral models
+        'mistral-7b': 'TheBloke/Mistral-7B-Instruct-v0.1-GGUF',
+        'mistral': 'TheBloke/Mistral-7B-Instruct-v0.1-GGUF',
+        
+        # CodeLlama models
+        'codellama': 'TheBloke/CodeLlama-7B-Instruct-GGUF',
+        'code-llama': 'TheBloke/CodeLlama-7B-Instruct-GGUF',
+    }
+
+def determine_model_repo(model_name):
+    """Determine the correct HuggingFace repo path from user's model choice"""
     
-    model_lower = model_name.lower()
-    repo_lower = model_repo.lower()
+    if not model_name or model_name == 'Unknown-Model':
+        log("⚠️  No model specified, using default Phi-2", "WARN")
+        return 'TheBloke/phi-2-dpo-GGUF'
     
-    # Deepseek models
-    if "deepseek" in model_lower or "deepseek" in repo_lower:
-        return {
-            "architectures": ["DeepseekForCausalLM"],
-            "model_type": "deepseek",
-            "hidden_size": 2048,
-            "num_attention_heads": 16,
-            "num_hidden_layers": 24,
-            "num_key_value_heads": 16,
-            "vocab_size": 32000,
-            "intermediate_size": 5504,
-            "bos_token_id": 100000,
-            "eos_token_id": 100001,
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-06,
-            "rope_theta": 10000.0,
-            "max_tokens": 8192
-        }
+    # Get mapping
+    repo_mapping = get_model_repo_mapping()
+    model_lower = model_name.lower().strip()
     
-    # Llama models (including CodeLlama)
-    elif "llama" in model_lower or "llama" in repo_lower:
-        return {
-            "architectures": ["LlamaForCausalLM"],
-            "model_type": "llama",
-            "hidden_size": 4096,
-            "num_attention_heads": 32,
-            "num_hidden_layers": 32,
-            "num_key_value_heads": 32,
-            "vocab_size": 32000,
-            "intermediate_size": 11008,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-06,
-            "rope_theta": 10000.0,
-            "max_tokens": 4096
-        }
+    # Direct mapping lookup
+    if model_lower in repo_mapping:
+        repo_path = repo_mapping[model_lower]
+        log(f"✅ Direct mapping: {model_name} -> {repo_path}")
+        return repo_path
     
-    # Mistral models
-    elif "mistral" in model_lower or "mistral" in repo_lower:
-        return {
-            "architectures": ["MistralForCausalLM"],
-            "model_type": "mistral",
-            "hidden_size": 4096,
-            "num_attention_heads": 32,
-            "num_hidden_layers": 32,
-            "num_key_value_heads": 8,
-            "vocab_size": 32000,
-            "intermediate_size": 14336,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-05,
-            "rope_theta": 10000.0,
-            "max_tokens": 4096
-        }
+    # Fuzzy matching for common patterns
+    for key, repo_path in repo_mapping.items():
+        if key in model_lower or model_lower in key:
+            log(f"✅ Pattern match: {model_name} -> {repo_path}")
+            return repo_path
     
-    # Phi models
-    elif "phi" in model_lower or "phi" in repo_lower:
-        return {
-            "architectures": ["PhiForCausalLM"],
-            "model_type": "phi",
-            "hidden_size": 2560,
-            "num_attention_heads": 32,
-            "num_hidden_layers": 32,
-            "num_key_value_heads": 32,
-            "vocab_size": 51200,
-            "intermediate_size": 10240,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "hidden_act": "gelu_new",
-            "rms_norm_eps": 1e-05,
-            "rope_theta": 10000.0,
-            "max_tokens": 2048
-        }
+    # If it's already a HuggingFace repo path, use it directly
+    if '/' in model_name and not model_name.endswith('.gguf'):
+        log(f"✅ Using provided repo path: {model_name}")
+        return model_name
     
-    # Default to Llama if unknown
+    # Default fallback
+    log(f"⚠️  Unknown model '{model_name}', using default Phi-2", "WARN")
+    return 'TheBloke/phi-2-dpo-GGUF'
+
+def get_max_tokens_for_model(repo_path):
+    """Get appropriate max tokens based on model type"""
+    
+    repo_lower = repo_path.lower()
+    
+    if 'tinyllama' in repo_lower or '1.1b' in repo_lower:
+        return '2048'
+    elif 'phi-2' in repo_lower or 'phi2' in repo_lower:
+        return '2048'  
+    elif 'deepseek' in repo_lower and ('1.3b' in repo_lower or 'coder' in repo_lower):
+        return '4096'
+    elif 'llama-2-7b' in repo_lower or 'llama2' in repo_lower:
+        return '4096'
+    elif 'mistral' in repo_lower:
+        return '4096'
+    elif 'codellama' in repo_lower:
+        return '4096'
     else:
-        log("⚠️  Unknown model type for " + model_name + ", defaulting to Llama architecture", "WARN")
-        return {
-            "architectures": ["LlamaForCausalLM"],
-            "model_type": "llama",
-            "hidden_size": 4096,
-            "num_attention_heads": 32,
-            "num_hidden_layers": 32,
-            "num_key_value_heads": 32,
-            "vocab_size": 32000,
-            "intermediate_size": 11008,
-            "bos_token_id": 1,
-            "eos_token_id": 2,
-            "hidden_act": "silu",
-            "rms_norm_eps": 1e-06,
-            "rope_theta": 10000.0,
-            "max_tokens": 4096
-        }
-
-def get_model_config(model_name, hf_token):
-    """Get GGUF model configuration with fallbacks"""
-    log("🔍 Looking for GGUF version of " + model_name + "...")
-    
-    # Priority repositories for GGUF models
-    gguf_repos = [
-        "TheBloke/" + model_name.replace('/', '-') + "-GGUF",
-        "microsoft/" + model_name.split('/')[-1] + "-gguf",
-        "bartowski/" + model_name.split('/')[-1] + "-GGUF",
-        "TheBloke/" + model_name.split('/')[-1] + "-GGUF"
-    ]
-    
-    # Fallback GGUF models if original not found
-    fallback_models = [
-        "TheBloke/Llama-2-7B-Chat-GGUF",
-        "TheBloke/Mistral-7B-Instruct-v0.1-GGUF", 
-        "microsoft/phi-2-gguf",
-        "TheBloke/CodeLlama-7B-Instruct-GGUF"
-    ]
-    
-    all_repos = gguf_repos + fallback_models
-    
-    for repo in all_repos:
-        try:
-            log("🔍 Checking repository: " + repo)
-            
-            # Use correct HuggingFace API endpoint
-            api_url = "https://huggingface.co/api/models/" + repo
-            
-            req = urllib.request.Request(api_url)
-            req.add_header('Authorization', 'Bearer ' + hf_token)
-            
-            with urllib.request.urlopen(req, timeout=10) as response:
-                if response.getcode() == 200:
-                    repo_info = json.loads(response.read().decode())
-                    
-                    # Check files in the repo
-                    files_url = "https://huggingface.co/api/models/" + repo + "/tree/main"
-                    files_req = urllib.request.Request(files_url)
-                    files_req.add_header('Authorization', 'Bearer ' + hf_token)
-                    
-                    with urllib.request.urlopen(files_req, timeout=10) as files_response:
-                        files_data = json.loads(files_response.read().decode())
-                        
-                        # Look for GGUF files
-                        gguf_files = [f for f in files_data if f['path'].endswith('.gguf')]
-                        
-                        if gguf_files:
-                            # Prefer Q4_K_M or Q5_K_M for good quality/size balance
-                            preferred_file = None
-                            for file in gguf_files:
-                                if 'q4_k_m' in file['path'].lower():
-                                    preferred_file = file
-                                    break
-                                elif 'q5_k_m' in file['path'].lower():
-                                    preferred_file = file
-                                    break
-                            
-                            if not preferred_file:
-                                preferred_file = gguf_files[0]  # Take first available
-                            
-                            config = {
-                                'model_repo': repo,
-                                'model_file': preferred_file['path'],
-                                'model_url': "https://huggingface.co/" + repo + "/resolve/main/" + preferred_file['path'],
-                                'model_size_gb': preferred_file.get('size', 0) / (1024**3),
-                                'is_fallback': repo in fallback_models
-                            }
-                            
-                            if config['is_fallback']:
-                                log("✅ Found fallback GGUF model: " + repo + "/" + preferred_file['path'], "SUCCESS")
-                            else:
-                                log("✅ Found GGUF version: " + repo + "/" + preferred_file['path'], "SUCCESS")
-                            
-                            log("📊 Model size: " + str(round(config['model_size_gb'], 1)) + "GB")
-                            return repo.split('/')[-1], config
-                            
-        except Exception as e:
-            log("⚠️  Could not access " + repo + ": " + str(e), "WARN")
-            continue
-    
-    log("❌ No GGUF models found", "ERROR")
-    return None, {}
-
-def download_with_auth(url, target_path, token):
-    """Download file with HuggingFace authentication - simplified version"""
-    try:
-        log("📥 Downloading: " + url)
-        log("📁 Target: " + target_path)
-        
-        # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        
-        # Create request with authentication
-        req = urllib.request.Request(url)
-        req.add_header('Authorization', 'Bearer ' + token)
-        
-        # Simple download without progress tracking
-        log("⏳ Starting download (this may take a few minutes for large models)...")
-        with urllib.request.urlopen(req, timeout=300) as response:
-            with open(target_path, 'wb') as f:
-                shutil.copyfileobj(response, f)
-        
-        # Verify download
-        if os.path.exists(target_path):
-            actual_size_gb = os.path.getsize(target_path) / (1024 * 1024 * 1024)
-            log("✅ Download completed: " + str(round(actual_size_gb, 1)) + "GB", "SUCCESS")
-            return True
-        else:
-            log("❌ Download failed - file not found", "ERROR")
-            return False
-            
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            log("❌ Authentication failed - check your HuggingFace token", "ERROR")
-        else:
-            log("❌ HTTP Error " + str(e.code) + ": " + str(e.reason), "ERROR")
-        return False
-    except Exception as e:
-        log("❌ Error downloading file: " + str(e), "ERROR")
-        return False
+        return '2048'  # Safe default
 
 def setup_models(install_path, config):
-    """Main model setup function - downloads and configures models"""
+    """
+    SIMPLIFIED MODEL SETUP: Let EzLocalAI handle downloads and management
     
-    # Get model configuration
-    model_name = config.get('MODEL_NAME', 'Unknown-Model')
-    backup_path = config.get('MODEL_BACKUP_PATH', '')
-    hf_token = config.get('HUGGINGFACE_TOKEN', '')
+    We only:
+    1. Create the models directory for volume mapping
+    2. Map user's model choice to HuggingFace repo path  
+    3. Set configuration for EzLocalAI
+    4. Let EzLocalAI do everything else
+    """
     
     try:
-        log("🤖 Setting up " + model_name + " model (GGUF focus)...")
+        log("🤖 Setting up model configuration (Simplified Approach)...")
         
-        # Get GGUF model configuration
-        final_model_name, model_config = get_model_config(model_name, hf_token)
+        # Get user's model choice
+        model_name = config.get('MODEL_NAME', config.get('DEFAULT_MODEL', 'phi-2'))
+        log(f"📝 User requested model: {model_name}")
         
-        if not model_config:
-            log("❌ No suitable GGUF model found - installation cannot continue", "ERROR")
-            return False
-        
-        if model_config.get('is_fallback'):
-            log("⚠️  Using fallback model: " + final_model_name, "WARN")
-        
-        # Get dynamic architecture based on actual model being used
-        model_repo = model_config['model_repo']
-        architecture = get_model_architecture(model_repo, final_model_name)
-        log("🏗️  Using " + architecture['model_type'] + " architecture for " + final_model_name)
-        
-        # FIXED: Create proper directory structure for EzLocalAI compatibility
-        models_dir = os.path.join(install_path, "models")  # Must be "models", not "ezlocalai"
+        # Create models directory for Docker volume mapping
+        # EzLocalAI expects ./models:/app/models volume mapping
+        models_dir = os.path.join(install_path, "models")
         os.makedirs(models_dir, exist_ok=True)
+        log(f"📁 Created models directory: {models_dir}")
         
-        # FIXED: Place GGUF file directly in models directory
-        model_filename = model_config['model_file']
-        target_model_path = os.path.join(models_dir, model_filename)
+        # Determine correct HuggingFace repo path
+        repo_path = determine_model_repo(model_name)
+        log(f"🎯 Selected HuggingFace repo: {repo_path}")
         
-        log("📁 EzLocalAI will find model at: /app/models/" + model_filename, "SUCCESS")
-        log("📁 Host path: " + target_model_path)
+        # Get appropriate max tokens for this model
+        max_tokens = get_max_tokens_for_model(repo_path)
+        log(f"🔢 Max tokens for this model: {max_tokens}")
         
-        # Check if backup model exists (original model path)
-        if backup_path and os.path.exists(backup_path):
-            log("💾 Found backup model at " + backup_path, "SUCCESS")
-            
-            # Get model size
-            model_size = os.path.getsize(backup_path) / (1024 * 1024 * 1024)  # GB
-            log("📊 Backup model size: " + str(round(model_size, 1)) + "GB")
-            
-            # Copy model file
-            log("📋 Copying model file from backup...")
-            shutil.copy2(backup_path, target_model_path)
-            
-            # Verify copy
-            if os.path.exists(target_model_path):
-                target_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)  # GB
-                log("✅ Model copied successfully: " + str(round(target_size, 1)) + "GB", "SUCCESS")
-            else:
-                log("❌ Model copy failed", "ERROR")
-                return False
-        else:
-            if backup_path:
-                log("⚠️  Backup model not found at " + backup_path, "WARN")
-            log("📥 Downloading GGUF model from HuggingFace with authentication...")
-            
-            # Download GGUF model with authentication
-            if not download_with_auth(model_config['model_url'], target_model_path, hf_token):
-                log("❌ Failed to download " + model_config['model_file'], "ERROR")
-                return False
-            log("✅ Downloaded " + model_config['model_file'] + " successfully", "SUCCESS")
+        # Set configuration for EzLocalAI
+        # EzLocalAI will use DEFAULT_MODEL to download from HuggingFace automatically
+        config['DEFAULT_MODEL'] = repo_path
+        config['EZLOCALAI_MODEL'] = repo_path
+        config['EZLOCALAI_MAX_TOKENS'] = max_tokens
+        config['LLM_MAX_TOKENS'] = max_tokens
         
-        # Set proper permissions
-        if os.path.exists(target_model_path):
-            os.chmod(target_model_path, 0o644)
-            log("🔒 Model permissions set", "SUCCESS")
+        # Store final model info for logging
+        config['FINAL_MODEL_NAME'] = repo_path.split('/')[-1]  # For display purposes
+        config['FINAL_MODEL_REPO'] = repo_path
         
-        # FIXED: Update config with HuggingFace repo path for EzLocalAI (not filename)
-        config['FINAL_MODEL_NAME'] = model_filename  # Keep for info/logging
-        config['FINAL_MODEL_FILE'] = model_filename  # Keep for info/logging
-        config['DEFAULT_MODEL'] = model_repo  # FIXED: EzLocalAI expects HuggingFace repo path
-        config['EZLOCALAI_MODEL'] = model_repo  # FIXED: EzLocalAI expects HuggingFace repo path
-        config['EZLOCALAI_MAX_TOKENS'] = str(architecture["max_tokens"])
-        config['LLM_MAX_TOKENS'] = str(architecture["max_tokens"])
+        # Log success
+        log("✅ Model configuration completed successfully!", "SUCCESS")
+        log(f"🎯 EzLocalAI will download: {repo_path}", "SUCCESS")
+        log(f"📊 Max tokens configured: {max_tokens}", "SUCCESS")
+        log("🔄 EzLocalAI will handle all file management automatically", "INFO")
         
-        # Add dynamic architecture values to config for .env file
-        config['MODEL_ARCHITECTURE_TYPE'] = architecture['model_type']
-        config['MODEL_HIDDEN_SIZE'] = str(architecture['hidden_size'])
-        config['MODEL_NUM_LAYERS'] = str(architecture['num_hidden_layers'])
-        config['MODEL_NUM_HEADS'] = str(architecture['num_attention_heads'])
-        config['MODEL_NUM_KV_HEADS'] = str(architecture['num_key_value_heads'])
-        config['MODEL_VOCAB_SIZE'] = str(architecture['vocab_size'])
-        config['MODEL_INTERMEDIATE_SIZE'] = str(architecture['intermediate_size'])
+        return True
         
-        # Final verification
-        if os.path.exists(target_model_path) and os.path.isfile(target_model_path):
-            final_size = os.path.getsize(target_model_path) / (1024 * 1024 * 1024)
-            log("✅ Model setup complete: " + model_filename + " (" + str(round(final_size, 1)) + "GB)", "SUCCESS")
-            log("🏗️  Architecture: " + architecture['model_type'] + " (" + str(architecture['hidden_size']) + "d)", "SUCCESS")
-            log("🎯 EzLocalAI will access: /app/models/" + model_filename, "SUCCESS")
-            log("🎯 DEFAULT_MODEL set to: " + model_repo + " (HuggingFace repo path)", "SUCCESS")
-            return True
-        else:
-            log("❌ Model setup failed", "ERROR")
-            return False
-            
     except Exception as e:
-        log("❌ Error setting up model files: " + str(e), "ERROR")
+        log(f"❌ Error setting up model configuration: {e}", "ERROR")
         return False
 
-# Module test function
 def test_module():
-    """Test this module's functionality"""
-    log("🧪 Testing installer_models module...")
+    """Test the simplified model setup"""
+    log("🧪 Testing simplified installer_models module...")
     
-    # Test architecture detection
-    test_models = [
-        ("deepseek-coder-1.3b-instruct", "deepseek"),
-        ("llama-2-7b-chat", "llama"),
-        ("mistral-7b-instruct", "mistral"),
-        ("phi-2", "phi")
+    # Test model mapping
+    test_cases = [
+        ('tinyllama', 'TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF'),
+        ('phi-2', 'TheBloke/phi-2-dpo-GGUF'),
+        ('deepseek', 'TheBloke/deepseek-coder-1.3b-instruct-GGUF'),
+        ('Unknown-Model', 'TheBloke/phi-2-dpo-GGUF'),  # Default
     ]
     
-    for model_name, expected_type in test_models:
-        arch = get_model_architecture("test/" + model_name, model_name)
-        if arch['model_type'] == expected_type:
-            log("Architecture detection for " + model_name + ": ✓", "SUCCESS")
+    for model_name, expected_repo in test_cases:
+        result = determine_model_repo(model_name)
+        if result == expected_repo:
+            log(f"✓ {model_name} -> {result}", "SUCCESS")
         else:
-            log("Architecture detection for " + model_name + ": ✗", "ERROR")
+            log(f"✗ {model_name} -> {result} (expected {expected_repo})", "ERROR")
     
-    log("✅ installer_models module test completed", "SUCCESS")
+    # Test max tokens
+    test_tokens = [
+        ('TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF', '2048'),
+        ('TheBloke/phi-2-dpo-GGUF', '2048'),
+        ('TheBloke/Llama-2-7B-Chat-GGUF', '4096'),
+    ]
+    
+    for repo, expected_tokens in test_tokens:
+        result = get_max_tokens_for_model(repo)
+        if result == expected_tokens:
+            log(f"✓ {repo} -> {result} tokens", "SUCCESS")
+        else:
+            log(f"✗ {repo} -> {result} tokens (expected {expected_tokens})", "ERROR")
+    
+    log("✅ Simplified installer_models module test completed", "SUCCESS")
     return True
 
 if __name__ == "__main__":
-    # Run module test if executed directly
     test_module()
