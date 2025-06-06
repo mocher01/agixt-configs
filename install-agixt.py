@@ -377,6 +377,7 @@ def main():
                     
                     if test_success:
                         log("✅ Post-installation tests completed successfully!", "SUCCESS")
+                        activate_agent()
                     else:
                         log("⚠️  Post-installation tests completed with warnings", "WARN")
                         log("ℹ️  Installation is functional but some tests failed", "INFO")
@@ -404,12 +405,7 @@ def main():
         except:
             pass
 
-if __name__ == "__main__":
-    main()
-
-
 # --- AGiXT Agent Activation (safe post-install hook) ---
-
 import requests
 import time
 
@@ -446,4 +442,5 @@ def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437", api_key
     except Exception as e:
         print(f"❌ Failed to activate agent: {e}")
 
-activate_agent()
+if __name__ == "__main__":
+    main()
