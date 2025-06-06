@@ -6,6 +6,7 @@ AGiXT Installer - Docker Module (FIXED - Correct Agent Configuration)
 FIXED: Agent provider set to 'ezlocalai' instead of 'rotation'
 FIXED: Proper DEFAULT_MODEL as HuggingFace repo path
 FIXED: Remove manual model management complexity
+FIXED: Don't override AGIXT_AGENT from config
 
 This creates the correct configuration that matches the working Phi-2 setup.
 """
@@ -145,8 +146,9 @@ def generate_all_variables(config):
     
     # === AGENT CONFIGURATION (CRITICAL FIX) ===
     
-    # FIX 3: Set AGIXT_AGENT correctly
-    all_vars['AGIXT_AGENT'] = 'XT'  # The agent name
+    # FIX 3: DON'T OVERRIDE AGIXT_AGENT from config - only set default if missing
+    if 'AGIXT_AGENT' not in all_vars:
+        all_vars['AGIXT_AGENT'] = 'XT'  # Only set default if not in config
     
     # Set container URLs
     all_vars['EZLOCALAI_URI'] = 'http://ezlocalai:8091'
@@ -268,7 +270,7 @@ def create_configuration(install_path, config):
         
         log(f"✅ Created .env with {len(all_vars)} variables")
         
-        # Create docker-compose.yml (same as before, structure is correct)
+        # Create docker-compose.yml with FIXED environment variables
         docker_compose_content = f"""version: '3.8'
 
 networks:
@@ -287,6 +289,8 @@ services:
       AGIXT_API_KEY: ${{AGIXT_API_KEY:-None}}
       AGIXT_URI: ${{AGIXT_URI:-http://agixt:7437}}
       APP_URI: ${{APP_URI:-http://localhost:3437}}
+      AGIXT_AGENT: ${{AGIXT_AGENT:-XT}}
+      AGIXT_AGENT_PROVIDER: ezlocalai
       WORKING_DIRECTORY: ${{WORKING_DIRECTORY:-/agixt/WORKSPACE}}
       REGISTRATION_DISABLED: ${{REGISTRATION_DISABLED:-false}}
       TOKENIZERS_PARALLELISM: "false"
@@ -359,6 +363,7 @@ services:
     depends_on:
       - agixt
       - ezlocalai
+
 """
         
         docker_compose_path = os.path.join(install_path, "docker-compose.yml")
@@ -381,6 +386,7 @@ services:
         log("🎯 Key fixes applied:", "SUCCESS")
         log("   • Agent provider set to 'ezlocalai'", "SUCCESS")
         log("   • DEFAULT_MODEL is HuggingFace repo path", "SUCCESS")
+        log("   • AGIXT_AGENT respects config value", "SUCCESS")
         log("   • No manual model downloads", "SUCCESS")
         return True
         
@@ -450,7 +456,7 @@ def start_services(install_path, config):
                     if line.strip():
                         log(f"   {line}")
         except:
-            log("⚠️  Could not check service status", "WARN")
+            log("⚠️ Could not check service status", "WARN")
         
         log("🎉 Service startup complete with FIXED configuration!", "SUCCESS")
         return True
@@ -466,7 +472,7 @@ def test_module():
     # Test variable generation
     test_config = {
         'MODEL_NAME': 'phi-2',
-        'AGIXT_AGENT': 'XT'
+        'AGIXT_AGENT': 'AutomationAssistant'  # Test that this is preserved
     }
     
     vars = generate_all_variables(test_config)
@@ -477,7 +483,7 @@ def test_module():
     else:
         log("DEFAULT_MODEL fix: ✗", "ERROR")
     
-    if vars.get('AGIXT_AGENT') == 'XT':
+    if vars.get('AGIXT_AGENT') == 'AutomationAssistant':  # Should preserve config value
         log("AGIXT_AGENT fix: ✓", "SUCCESS")
     else:
         log("AGIXT_AGENT fix: ✗", "ERROR")
