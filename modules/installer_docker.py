@@ -188,7 +188,7 @@ def create_agent_configuration(install_path, config):
                 "vision_provider": "gpt4vision",
                 "AI_MODEL": config.get('DEFAULT_MODEL', 'TheBloke/phi-2-dpo-GGUF'),
                 "EZLOCALAI_API_KEY": config.get('EZLOCALAI_API_KEY', ''),
-                "MAX_TOKENS": config.get('LLM_MAX_TOKENS', '4096'),
+                "MAX_TOKENS": config.get('LLM_MAX_TOKENS', '2048'),
                 "AI_TEMPERATURE": "0.7",
                 "AI_TOP_P": "0.9",
                 "VOICE": "DukeNukem",
@@ -314,7 +314,7 @@ services:
       - EZLOCALAI_URL=${{EZLOCALAI_URL:-http://localhost:8091}}
       - EZLOCALAI_API_KEY=${{EZLOCALAI_API_KEY}}
       - DEFAULT_MODEL=${{DEFAULT_MODEL:-TheBloke/phi-2-dpo-GGUF}}
-      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS:-0}}
+      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS:-2048}}
       - WHISPER_MODEL=${{WHISPER_MODEL:-base.en}}
       - IMG_ENABLED=${{IMG_ENABLED:-false}}
       - IMG_DEVICE=${{IMG_DEVICE:-cpu}}
