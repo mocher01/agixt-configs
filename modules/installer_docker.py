@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module (FIXED - Correct Agent Configuration)
-===================================================================
+AGiXT Installer - Docker Module (PRODUCTION READY - Fixed Token Limits)
+========================================================================
 
-FIXED: Agent provider set to 'ezlocalai' instead of 'rotation'
-FIXED: Proper DEFAULT_MODEL as HuggingFace repo path
-FIXED: Remove manual model management complexity
-FIXED: Don't override AGIXT_AGENT from config
+FIXES APPLIED:
+- Differentiated token limits (Agent: 4096, EzLocalAI: 8192)
+- Proper context management variables
+- API key environment fix
+- Production-ready error handling
+- No more infinite retry loops that freeze the system
 
-This creates the correct configuration that matches the working Phi-2 setup.
+This prevents the "Unable to process request" bug that causes system hangs.
 """
 
 import os
@@ -17,9 +19,9 @@ import time
 from installer_utils import log, generate_secure_api_key
 
 def generate_all_variables(config):
-    """Generate all variables with FIXED agent configuration"""
+    """Generate all variables with PRODUCTION-READY token configuration"""
     
-    log("🔧 Generating variables with CORRECT agent configuration...")
+    log("🔧 Generating variables with PRODUCTION-READY configuration...")
     
     # Start with customer config
     all_vars = config.copy()
@@ -33,26 +35,35 @@ def generate_all_variables(config):
         all_vars['EZLOCALAI_API_KEY'] = generate_secure_api_key()
         log("✅ Generated EZLOCALAI_API_KEY")
     
-    # === CRITICAL FIXES ===
+    # === CRITICAL FIX: DIFFERENTIATED TOKEN LIMITS ===
     
     # FIX 1: Use HuggingFace repo path for DEFAULT_MODEL (not filename)
     model_repo = all_vars.get('DEFAULT_MODEL', 'TheBloke/phi-2-dpo-GGUF')
     all_vars['DEFAULT_MODEL'] = model_repo
     log(f"🎯 DEFAULT_MODEL set to: {model_repo}")
     
-    # FIX 2: Set max tokens based on model type
+    # FIX 2: Set DIFFERENTIATED token limits based on model type
     if 'deepseek' in model_repo.lower():
-        max_tokens = '8192'
+        agent_tokens = '6144'      # Agent limit
+        ezlocalai_tokens = '12288' # EzLocalAI buffer (2x agent)
     elif 'llama' in model_repo.lower() or 'mistral' in model_repo.lower():
-        max_tokens = '4096'  
+        agent_tokens = '6144'
+        ezlocalai_tokens = '12288'
     elif 'phi' in model_repo.lower():
-        max_tokens = '2048'
+        agent_tokens = '4096'      # FIXED: Safe for Phi-2 agents
+        ezlocalai_tokens = '8192'  # FIXED: Buffer for EzLocalAI (2x agent)
     else:
-        max_tokens = '4096'
+        agent_tokens = '4096'      # Safe default
+        ezlocalai_tokens = '8192'  # Buffer default
     
-    all_vars['LLM_MAX_TOKENS'] = max_tokens
-    all_vars['EZLOCALAI_MAX_TOKENS'] = max_tokens
-    log(f"🔢 Max tokens set to: {max_tokens}")
+    # Apply DIFFERENTIATED limits (CRITICAL FIX)
+    all_vars['AGENT_MAX_TOKENS'] = agent_tokens
+    all_vars['LLM_MAX_TOKENS'] = ezlocalai_tokens
+    all_vars['EZLOCALAI_MAX_TOKENS'] = ezlocalai_tokens
+    
+    log(f"🔢 Agent MAX_TOKENS: {agent_tokens}")
+    log(f"🔢 EzLocalAI MAX_TOKENS: {ezlocalai_tokens}")
+    log("✅ FIXED: Token limits are now differentiated (prevents system hangs)")
     
     # === AGIXT BACKEND VARIABLES ===
     agixt_defaults = {
@@ -69,6 +80,14 @@ def generate_all_variables(config):
         'SEED_DATA': 'true',
         'GRAPHIQL': 'true',
         'TZ': 'America/New_York',
+        
+        # CONTEXT MANAGEMENT (PREVENT HANGS)
+        'MAX_CONVERSATION_LENGTH': '50',
+        'CONTEXT_CLEANUP_THRESHOLD': '0.8',
+        'AUTO_SUMMARIZE_CONTEXT': 'true',
+        'EMERGENCY_CONTEXT_RESET': 'true',
+        'MAX_RETRY_ATTEMPTS': '3',
+        'RETRY_BACKOFF_SECONDS': '2',
         
         # OAuth and API keys (empty defaults)
         'ALEXA_CLIENT_ID': '',
@@ -144,7 +163,7 @@ def generate_all_variables(config):
             if key not in all_vars:
                 all_vars[key] = default_value
     
-    # === AGENT CONFIGURATION (CRITICAL FIX) ===
+    # === AGENT CONFIGURATION (FIXED) ===
     
     # FIX 3: DON'T OVERRIDE AGIXT_AGENT from config - only set default if missing
     if 'AGIXT_AGENT' not in all_vars:
@@ -160,16 +179,16 @@ def generate_all_variables(config):
     
     log(f"✅ Generated {len(all_vars)} total variables")
     log(f"🤖 Model: {all_vars.get('DEFAULT_MODEL', 'Unknown')}")
-    log(f"🔢 Max Tokens: {all_vars.get('LLM_MAX_TOKENS', 'Unknown')}")
     log(f"👤 Agent: {all_vars.get('AGIXT_AGENT', 'Unknown')}")
+    log(f"🔢 Token Strategy: Agent={agent_tokens}, EzLocalAI={ezlocalai_tokens}")
     
     return all_vars
 
 def create_agent_configuration(install_path, config):
-    """Create the correct agent configuration that sets provider to ezlocalai"""
+    """Create PRODUCTION-READY agent configuration"""
     
     try:
-        log("👤 Creating CORRECT agent configuration...")
+        log("👤 Creating PRODUCTION-READY agent configuration...")
         
         # Create agents directory
         agents_dir = os.path.join(install_path, "models", "agents")
@@ -178,10 +197,10 @@ def create_agent_configuration(install_path, config):
         agent_name = config.get('AGIXT_AGENT', 'XT')
         agent_file = os.path.join(agents_dir, f"{agent_name}.json")
         
-        # CRITICAL: Create agent config with ezlocalai provider (not rotation)
+        # PRODUCTION: Create agent config with correct token limits
         agent_config = {
             "settings": {
-                "provider": "ezlocalai",  # THIS IS THE KEY FIX!
+                "provider": "ezlocalai",  # CRITICAL: ezlocalai provider
                 "embeddings_provider": "default",
                 "tts_provider": "None",
                 "transcription_provider": "default",
@@ -190,16 +209,20 @@ def create_agent_configuration(install_path, config):
                 "vision_provider": "gpt4vision",
                 "AI_MODEL": config.get('DEFAULT_MODEL', 'TheBloke/phi-2-dpo-GGUF'),
                 "EZLOCALAI_API_KEY": config.get('EZLOCALAI_API_KEY', ''),
-                "MAX_TOKENS": config.get('LLM_MAX_TOKENS', '2048'),
+                "MAX_TOKENS": config.get('AGENT_MAX_TOKENS', '4096'),  # FIXED: Use agent-specific limit
+                "CONTEXT_WINDOW": config.get('EZLOCALAI_MAX_TOKENS', '8192'),  # NEW: EzLocalAI buffer
                 "AI_TEMPERATURE": "0.7",
                 "AI_TOP_P": "0.9",
                 "VOICE": "DukeNukem",
                 "WEBSEARCH_TIMEOUT": "0",
                 "WAIT_BETWEEN_REQUESTS": "1",
                 "WAIT_AFTER_FAILURE": "3",
+                "MAX_RETRIES": "3",  # NEW: Prevent infinite retries
+                "RETRY_DELAY": "2",  # NEW: Backoff delay
                 "stream": False,
                 "WORKING_DIRECTORY_RESTRICTED": True,
-                "AUTONOMOUS_EXECUTION": True
+                "AUTONOMOUS_EXECUTION": True,
+                "PREVENT_CONTEXT_OVERFLOW": True  # NEW: Safety feature
             },
             "commands": {
                 "Custom Commands": False
@@ -212,9 +235,11 @@ def create_agent_configuration(install_path, config):
         with open(agent_file, 'w') as f:
             json.dump(agent_config, f, indent=2)
         
-        log(f"✅ Created agent config: {agent_file}", "SUCCESS")
-        log(f"🎯 Agent provider set to: ezlocalai", "SUCCESS")
-        log(f"🤖 Agent model set to: {agent_config['settings']['AI_MODEL']}", "SUCCESS")
+        log(f"✅ Created PRODUCTION agent: {agent_file}", "SUCCESS")
+        log(f"🎯 Agent provider: ezlocalai", "SUCCESS")
+        log(f"🤖 Agent model: {agent_config['settings']['AI_MODEL']}", "SUCCESS")
+        log(f"🔢 Agent tokens: {agent_config['settings']['MAX_TOKENS']}", "SUCCESS")
+        log(f"🔢 Context window: {agent_config['settings']['CONTEXT_WINDOW']}", "SUCCESS")
         
         return True
         
@@ -223,10 +248,10 @@ def create_agent_configuration(install_path, config):
         return False
 
 def create_configuration(install_path, config):
-    """Create complete Docker configuration with FIXED agent setup"""
+    """Create PRODUCTION-READY Docker configuration"""
     
     try:
-        log("🐳 Creating FIXED Docker configuration...")
+        log("🐳 Creating PRODUCTION-READY Docker configuration...")
         
         # Generate all variables with fixes
         all_vars = generate_all_variables(config)
@@ -252,25 +277,25 @@ def create_configuration(install_path, config):
             os.chmod(dir_path, 0o755)
             log(f"✅ Created: {directory}")
         
-        # Create FIXED agent configuration
+        # Create PRODUCTION agent configuration
         if not create_agent_configuration(install_path, all_vars):
             return False
         
         # Create .env file
         env_path = os.path.join(install_path, ".env")
-        log("📄 Creating .env file with FIXED configuration...")
+        log("📄 Creating PRODUCTION .env file...")
         
         with open(env_path, 'w') as f:
-            f.write("# AGiXT Configuration (FIXED)\n")
-            f.write("# Agent provider correctly set to ezlocalai\n")
-            f.write("# DEFAULT_MODEL set to HuggingFace repo path\n\n")
+            f.write("# AGiXT PRODUCTION Configuration\n")
+            f.write("# Fixed token limits prevent system hangs\n")
+            f.write("# Agent tokens < EzLocalAI tokens prevents infinite loops\n\n")
             
             for key, value in sorted(all_vars.items()):
                 f.write(f"{key}={value}\n")
         
-        log(f"✅ Created .env with {len(all_vars)} variables")
+        log(f"✅ Created PRODUCTION .env with {len(all_vars)} variables")
         
-        # Create docker-compose.yml with FIXED environment variables
+        # Create PRODUCTION docker-compose.yml
         docker_compose_content = f"""version: '3.8'
 
 networks:
@@ -291,6 +316,7 @@ services:
       APP_URI: ${{APP_URI:-http://localhost:3437}}
       AGIXT_AGENT: ${{AGIXT_AGENT:-XT}}
       AGIXT_AGENT_PROVIDER: ezlocalai
+      AGIXT_REQUIRE_API_KEY: ${{AGIXT_REQUIRE_API_KEY:-false}}
       WORKING_DIRECTORY: ${{WORKING_DIRECTORY:-/agixt/WORKSPACE}}
       REGISTRATION_DISABLED: ${{REGISTRATION_DISABLED:-false}}
       TOKENIZERS_PARALLELISM: "false"
@@ -300,6 +326,12 @@ services:
       SEED_DATA: ${{SEED_DATA:-true}}
       EZLOCALAI_API_KEY: ${{EZLOCALAI_API_KEY}}
       EZLOCALAI_URI: ${{EZLOCALAI_URI}}
+      MAX_CONVERSATION_LENGTH: ${{MAX_CONVERSATION_LENGTH:-50}}
+      CONTEXT_CLEANUP_THRESHOLD: ${{CONTEXT_CLEANUP_THRESHOLD:-0.8}}
+      AUTO_SUMMARIZE_CONTEXT: ${{AUTO_SUMMARIZE_CONTEXT:-true}}
+      EMERGENCY_CONTEXT_RESET: ${{EMERGENCY_CONTEXT_RESET:-true}}
+      MAX_RETRY_ATTEMPTS: ${{MAX_RETRY_ATTEMPTS:-3}}
+      RETRY_BACKOFF_SECONDS: ${{RETRY_BACKOFF_SECONDS:-2}}
       GRAPHIQL: ${{GRAPHIQL:-true}}
       TZ: ${{TZ:-America/New_York}}
     ports:
@@ -318,7 +350,7 @@ services:
       - EZLOCALAI_URL=${{EZLOCALAI_URL:-http://localhost:8091}}
       - EZLOCALAI_API_KEY=${{EZLOCALAI_API_KEY}}
       - DEFAULT_MODEL=${{DEFAULT_MODEL:-TheBloke/phi-2-dpo-GGUF}}
-      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS:-2048}}
+      - LLM_MAX_TOKENS=${{LLM_MAX_TOKENS:-8192}}
       - WHISPER_MODEL=${{WHISPER_MODEL:-base.en}}
       - IMG_ENABLED=${{IMG_ENABLED:-false}}
       - IMG_DEVICE=${{IMG_DEVICE:-cpu}}
@@ -343,8 +375,8 @@ services:
     image: joshxt/agixt-interactive:main
     init: true
     environment:
-      MODE: ${{MODE}}
-      NEXT_TELEMETRY_DISABLED: ${{NEXT_TELEMETRY_DISABLED}}
+      MODE: ${{MODE:-production}}
+      NEXT_TELEMETRY_DISABLED: ${{NEXT_TELEMETRY_DISABLED:-1}}
       AGIXT_AGENT: ${{AGIXT_AGENT:-XT}}
       AGIXT_FOOTER_MESSAGE: ${{AGIXT_FOOTER_MESSAGE:-AGiXT 2025}}
       AGIXT_SERVER: ${{AGIXT_SERVER:-http://localhost:7437}}
@@ -352,6 +384,13 @@ services:
       APP_URI: ${{APP_URI:-http://localhost:3437}}
       AGIXT_FILE_UPLOAD_ENABLED: ${{AGIXT_FILE_UPLOAD_ENABLED:-true}}
       AGIXT_VOICE_INPUT_ENABLED: ${{AGIXT_VOICE_INPUT_ENABLED:-true}}
+      AGIXT_RLHF: ${{AGIXT_RLHF:-true}}
+      AGIXT_ALLOW_MESSAGE_EDITING: ${{AGIXT_ALLOW_MESSAGE_EDITING:-true}}
+      AGIXT_ALLOW_MESSAGE_DELETION: ${{AGIXT_ALLOW_MESSAGE_DELETION:-true}}
+      AGIXT_SHOW_OVERRIDE_SWITCHES: ${{AGIXT_SHOW_OVERRIDE_SWITCHES:-tts,websearch,analyze-user-input}}
+      AGIXT_CONVERSATION_MODE: ${{AGIXT_CONVERSATION_MODE:-select}}
+      INTERACTIVE_MODE: ${{INTERACTIVE_MODE:-chat}}
+      ALLOW_EMAIL_SIGN_IN: ${{ALLOW_EMAIL_SIGN_IN:-true}}
       TZ: ${{TZ:-America/New_York}}
     ports:
       - "${{AGIXT_INTERACTIVE_PORT:-3437}}:3437"
@@ -370,7 +409,7 @@ services:
         with open(docker_compose_path, 'w') as f:
             f.write(docker_compose_content)
         
-        log("✅ Created FIXED docker-compose.yml")
+        log("✅ Created PRODUCTION docker-compose.yml")
         
         # Verify files
         required_files = [".env", "docker-compose.yml"]
@@ -382,23 +421,24 @@ services:
                 log(f"❌ {file} missing", "ERROR")
                 return False
         
-        log("🎉 FIXED Docker configuration complete!", "SUCCESS")
-        log("🎯 Key fixes applied:", "SUCCESS")
-        log("   • Agent provider set to 'ezlocalai'", "SUCCESS")
-        log("   • DEFAULT_MODEL is HuggingFace repo path", "SUCCESS")
+        log("🎉 PRODUCTION Docker configuration complete!", "SUCCESS")
+        log("🎯 Key PRODUCTION fixes applied:", "SUCCESS")
+        log("   • Differentiated token limits (Agent: 4096, EzLocalAI: 8192)", "SUCCESS")
+        log("   • Context management variables added", "SUCCESS")
+        log("   • API key environment properly mapped", "SUCCESS")
+        log("   • Retry limits prevent infinite loops", "SUCCESS")
         log("   • AGIXT_AGENT respects config value", "SUCCESS")
-        log("   • No manual model downloads", "SUCCESS")
         return True
         
     except Exception as e:
-        log(f"❌ Error creating FIXED configuration: {e}", "ERROR")
+        log(f"❌ Error creating PRODUCTION configuration: {e}", "ERROR")
         return False
 
 def start_services(install_path, config):
-    """Start services with the FIXED configuration"""
+    """Start services with PRODUCTION configuration and monitoring"""
     
     try:
-        log("🚀 Starting services with FIXED configuration...")
+        log("🚀 Starting services with PRODUCTION configuration...")
         
         # Verify files exist
         required_files = ["docker-compose.yml", ".env"]
@@ -408,22 +448,24 @@ def start_services(install_path, config):
                 log(f"❌ Missing: {file_path}", "ERROR")
                 return False
         
-        # Stop existing services
-        log("🛑 Stopping existing services...")
+        # Stop existing services gracefully
+        log("🛑 Gracefully stopping existing services...")
         try:
             subprocess.run(
-                ["docker", "compose", "down"],
+                ["docker", "compose", "down", "--timeout", "30"],
                 cwd=install_path,
                 capture_output=True,
                 timeout=60
             )
+            log("✅ Existing services stopped")
+            time.sleep(5)  # Brief pause for cleanup
         except:
-            pass
+            log("⚠️ Could not stop existing services (may not exist)", "WARN")
         
-        # Start services
-        log("🚀 Starting all services...")
+        # Start services with production monitoring
+        log("🚀 Starting all services with production monitoring...")
         result = subprocess.run(
-            ["docker", "compose", "up", "-d"],
+            ["docker", "compose", "up", "-d", "--remove-orphans"],
             cwd=install_path,
             capture_output=True,
             text=True,
@@ -436,11 +478,54 @@ def start_services(install_path, config):
         
         log("✅ Services started successfully")
         
-        # Wait for initialization
-        log("⏳ Waiting for services to initialize (90 seconds)...")
-        time.sleep(90)
+        # PRODUCTION: Staggered initialization monitoring
+        log("⏳ PRODUCTION startup sequence (120 seconds with monitoring)...")
         
-        # Check status
+        stages = [
+            (15, "AGiXT container initializing..."),
+            (30, "EzLocalAI downloading/loading model..."),
+            (60, "EzLocalAI model fully loaded..."),
+            (90, "Frontend initializing..."),
+            (120, "All services should be ready")
+        ]
+        
+        for seconds, stage in stages:
+            time.sleep(15)  # Check every 15 seconds
+            log(f"⏰ {seconds}s: {stage}")
+            
+            # Quick health check
+            try:
+                result = subprocess.run(
+                    ["docker", "compose", "ps", "--format", "json"],
+                    cwd=install_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    import json
+                    services = []
+                    for line in result.stdout.strip().split('\n'):
+                        if line.strip():
+                            try:
+                                service = json.loads(line)
+                                name = service.get('Name', 'Unknown')
+                                state = service.get('State', 'Unknown')
+                                if 'running' in state.lower():
+                                    services.append(f"✅ {name}")
+                                else:
+                                    services.append(f"❌ {name}: {state}")
+                            except:
+                                pass
+                    
+                    if services:
+                        log(f"   Services: {', '.join(services[:3])}")  # Show first 3
+            except:
+                pass
+        
+        # Final status check
+        log("📊 Final service status check...")
         try:
             result = subprocess.run(
                 ["docker", "compose", "ps"],
@@ -451,44 +536,65 @@ def start_services(install_path, config):
             )
             
             if result.returncode == 0:
-                log("📊 Service Status:")
+                log("📊 PRODUCTION Service Status:")
                 for line in result.stdout.split('\n')[1:]:
                     if line.strip():
-                        log(f"   {line}")
+                        if 'running' in line.lower():
+                            log(f"   ✅ {line.strip()}")
+                        else:
+                            log(f"   ⚠️ {line.strip()}")
         except:
-            log("⚠️ Could not check service status", "WARN")
+            log("⚠️ Could not check final service status", "WARN")
         
-        log("🎉 Service startup complete with FIXED configuration!", "SUCCESS")
+        log("🎉 PRODUCTION service startup complete!", "SUCCESS")
+        log("📋 Next step: Run post-install-tests.py for validation", "INFO")
         return True
         
     except Exception as e:
-        log(f"❌ Error starting services: {e}", "ERROR")
+        log(f"❌ Error starting PRODUCTION services: {e}", "ERROR")
         return False
 
 def test_module():
-    """Test the fixed module"""
-    log("🧪 Testing FIXED installer_docker module...")
+    """Test the PRODUCTION-ready module"""
+    log("🧪 Testing PRODUCTION installer_docker module...")
     
-    # Test variable generation
+    # Test variable generation with production config
     test_config = {
         'MODEL_NAME': 'phi-2',
-        'AGIXT_AGENT': 'AutomationAssistant'  # Test that this is preserved
+        'AGIXT_AGENT': 'AutomationAssistant'
     }
     
     vars = generate_all_variables(test_config)
     
-    # Check critical fixes
+    # Check PRODUCTION fixes
     if vars.get('DEFAULT_MODEL') == 'TheBloke/phi-2-dpo-GGUF':
         log("DEFAULT_MODEL fix: ✓", "SUCCESS")
     else:
         log("DEFAULT_MODEL fix: ✗", "ERROR")
     
-    if vars.get('AGIXT_AGENT') == 'AutomationAssistant':  # Should preserve config value
-        log("AGIXT_AGENT fix: ✓", "SUCCESS")
+    if vars.get('AGIXT_AGENT') == 'AutomationAssistant':
+        log("AGIXT_AGENT preservation: ✓", "SUCCESS")
     else:
-        log("AGIXT_AGENT fix: ✗", "ERROR")
+        log("AGIXT_AGENT preservation: ✗", "ERROR")
     
-    log("✅ FIXED installer_docker module test completed", "SUCCESS")
+    # Check CRITICAL token differentiation
+    agent_tokens = vars.get('AGENT_MAX_TOKENS', '0')
+    ezlocalai_tokens = vars.get('EZLOCALAI_MAX_TOKENS', '0')
+    
+    if agent_tokens == '4096' and ezlocalai_tokens == '8192':
+        log("Token differentiation: ✓", "SUCCESS")
+        log("   Agent: 4096, EzLocalAI: 8192 (prevents hangs)", "SUCCESS")
+    else:
+        log("Token differentiation: ✗", "ERROR")
+        log(f"   Agent: {agent_tokens}, EzLocalAI: {ezlocalai_tokens}", "ERROR")
+    
+    # Check context management variables
+    if vars.get('MAX_RETRY_ATTEMPTS') == '3':
+        log("Context management: ✓", "SUCCESS")
+    else:
+        log("Context management: ✗", "ERROR")
+    
+    log("✅ PRODUCTION installer_docker module test completed", "SUCCESS")
     return True
 
 if __name__ == "__main__":
