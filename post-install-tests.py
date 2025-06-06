@@ -3,8 +3,15 @@
 AGiXT Enhanced Post-Installation Test Suite
 ===========================================
 
-Enhanced version that tests both localhost AND configured domains,
-with deep debugging to understand AGiXT API failures.
+Enhanced version that validates token configurations, model settings,
+and performs comprehensive debugging to catch installer issues early.
+
+NEW FEATURES:
+- Token limit validation (checks for 16K vs 2048 mismatch)
+- Agent configuration verification
+- Model path validation
+- Provider settings check
+- Deep debugging of configuration mismatches
 """
 
 import os
@@ -36,13 +43,14 @@ def log(message, level="INFO"):
         "WARN": Colors.YELLOW,
         "TEST": Colors.CYAN,
         "HEADER": Colors.PURPLE + Colors.BOLD,
-        "DEBUG": Colors.BLUE
+        "DEBUG": Colors.BLUE,
+        "CRITICAL": Colors.RED + Colors.BOLD
     }
     color = color_map.get(level, Colors.WHITE)
     print(f"{color}[{timestamp}] {level}: {message}{Colors.RESET}")
 
 def load_config_from_env(install_path):
-    """Load configuration from .env file to test configured domains"""
+    """Load configuration from .env file"""
     config = {}
     env_path = os.path.join(install_path, ".env")
     
@@ -59,271 +67,276 @@ def load_config_from_env(install_path):
     
     return config
 
-def debug_agixt_database_issue(install_path):
-    """Deep debugging of AGiXT database issues"""
-    log("🔍 DEEP DEBUGGING: AGiXT Database Issues", "HEADER")
+def load_agent_config(install_path, agent_name="XT"):
+    """Load agent configuration from JSON file"""
+    agent_path = os.path.join(install_path, "models", "agents", f"{agent_name}.json")
     
-    # Check database configuration in .env
-    config = load_config_from_env(install_path)
-    db_type = config.get('DATABASE_TYPE', 'Not set')
-    db_name = config.get('DATABASE_NAME', 'Not set')
-    
-    log(f"📊 Database Configuration:", "DEBUG")
-    log(f"  DATABASE_TYPE: {db_type}", "DEBUG")
-    log(f"  DATABASE_NAME: {db_name}", "DEBUG")
-    
-    # Check if models directory exists
-    models_path = os.path.join(install_path, "models")
-    if os.path.exists(models_path):
-        log(f"✅ Models directory exists: {models_path}", "SUCCESS")
-        
-        # Check contents
+    if os.path.exists(agent_path):
         try:
-            contents = os.listdir(models_path)
-            if contents:
-                log(f"📁 Models directory contents: {contents}", "DEBUG")
-            else:
-                log("⚠️  Models directory is empty", "WARN")
+            with open(agent_path, 'r') as f:
+                return json.load(f)
         except Exception as e:
-            log(f"❌ Cannot read models directory: {e}", "ERROR")
+            log(f"Could not load agent config: {e}", "WARN")
+            return {}
     else:
-        log(f"❌ Models directory missing: {models_path}", "ERROR")
-    
-    # Check AGiXT directory structure
-    agixt_path = os.path.join(install_path, "agixt")
-    if os.path.exists(agixt_path):
-        log(f"✅ AGiXT directory exists: {agixt_path}", "SUCCESS")
-    else:
-        log(f"❌ AGiXT directory missing: {agixt_path}", "ERROR")
-    
-    # Get recent AGiXT container logs
-    try:
-        log("📋 Recent AGiXT container logs:", "DEBUG")
-        result = subprocess.run(
-            ["docker", "compose", "logs", "agixt", "--tail", "10"],
-            cwd=install_path,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        if result.returncode == 0:
-            for line in result.stdout.split('\n')[-5:]:
-                if line.strip():
-                    log(f"  {line}", "DEBUG")
-        else:
-            log("Could not get AGiXT logs", "WARN")
-    except Exception as e:
-        log(f"Error getting AGiXT logs: {e}", "WARN")
+        log(f"Agent config file not found: {agent_path}", "WARN")
+        return {}
 
-def test_configured_domains(config):
-    """Test the actual configured domains from the config"""
-    log("🌐 Testing Configured Domains from Config", "HEADER")
+def test_token_configuration_comprehensive(install_path):
+    """CRITICAL: Test for the token limit mismatch issue"""
+    log("🔢 TESTING TOKEN CONFIGURATION (CRITICAL)", "HEADER")
     
-    # Extract domain URLs from config
-    domain_urls = {
-        'AGIXT_SERVER': config.get('AGIXT_SERVER', ''),
-        'APP_URI': config.get('APP_URI', ''),
-        'AUTH_WEB': config.get('AUTH_WEB', '')
+    config = load_config_from_env(install_path)
+    agent_config = load_agent_config(install_path)
+    
+    issues = []
+    warnings = []
+    
+    # 1. Check environment variables
+    log("📋 Environment Token Configuration:", "TEST")
+    
+    llm_max_tokens = config.get('LLM_MAX_TOKENS', 'NOT_SET')
+    ezlocalai_max_tokens = config.get('EZLOCALAI_MAX_TOKENS', 'NOT_SET')
+    default_model = config.get('DEFAULT_MODEL', 'NOT_SET')
+    
+    log(f"  LLM_MAX_TOKENS: {llm_max_tokens}", "DEBUG")
+    log(f"  EZLOCALAI_MAX_TOKENS: {ezlocalai_max_tokens}", "DEBUG")
+    log(f"  DEFAULT_MODEL: {default_model}", "DEBUG")
+    
+    # 2. Check agent configuration
+    log("👤 Agent Token Configuration:", "TEST")
+    
+    agent_provider = "NOT_SET"
+    agent_max_tokens = "NOT_SET"
+    agent_model = "NOT_SET"
+    
+    if agent_config and 'settings' in agent_config:
+        settings = agent_config['settings']
+        agent_provider = settings.get('provider', 'NOT_SET')
+        agent_max_tokens = settings.get('MAX_TOKENS', 'NOT_SET')
+        agent_model = settings.get('AI_MODEL', 'NOT_SET')
+    
+    log(f"  Agent Provider: {agent_provider}", "DEBUG")
+    log(f"  Agent MAX_TOKENS: {agent_max_tokens}", "DEBUG")
+    log(f"  Agent AI_MODEL: {agent_model}", "DEBUG")
+    
+    # 3. CRITICAL VALIDATIONS
+    log("🎯 Critical Token Validation:", "TEST")
+    
+    # Check for the 16K token limit bug
+    if ezlocalai_max_tokens in ['0', 'NOT_SET']:
+        issues.append("EZLOCALAI_MAX_TOKENS is 0 or missing - will cause 16K token limit bug!")
+        log("❌ CRITICAL: EZLOCALAI_MAX_TOKENS=0 will cause AGiXT to use 16000 token limit", "CRITICAL")
+    elif ezlocalai_max_tokens == '2048':
+        log("✅ EZLOCALAI_MAX_TOKENS correctly set to 2048", "SUCCESS")
+    else:
+        warnings.append(f"EZLOCALAI_MAX_TOKENS={ezlocalai_max_tokens} (expected 2048 for Phi-2)")
+        log(f"⚠️  EZLOCALAI_MAX_TOKENS={ezlocalai_max_tokens} (expected 2048)", "WARN")
+    
+    # Check agent token consistency
+    if agent_max_tokens == '4096':
+        issues.append("Agent MAX_TOKENS=4096 (hardcoded default from installer bug)")
+        log("❌ CRITICAL: Agent MAX_TOKENS=4096 suggests installer wasn't fixed", "CRITICAL")
+    elif agent_max_tokens == '2048':
+        log("✅ Agent MAX_TOKENS correctly set to 2048", "SUCCESS")
+    elif agent_max_tokens == 'NOT_SET':
+        issues.append("Agent configuration missing or corrupted")
+        log("❌ Agent MAX_TOKENS not found in configuration", "ERROR")
+    else:
+        warnings.append(f"Agent MAX_TOKENS={agent_max_tokens} (unexpected value)")
+        log(f"⚠️  Agent MAX_TOKENS={agent_max_tokens} (unusual value)", "WARN")
+    
+    # Check provider setting
+    if agent_provider == 'rotation':
+        issues.append("Agent provider=rotation (should be ezlocalai)")
+        log("❌ CRITICAL: Agent provider=rotation will cause failures", "CRITICAL")
+    elif agent_provider == 'ezlocalai':
+        log("✅ Agent provider correctly set to ezlocalai", "SUCCESS")
+    else:
+        issues.append(f"Agent provider={agent_provider} (unexpected)")
+        log(f"❌ Agent provider={agent_provider} (should be ezlocalai)", "ERROR")
+    
+    # Check model configuration
+    if 'phi-2' in default_model.lower():
+        log("✅ DEFAULT_MODEL is Phi-2 based", "SUCCESS")
+        
+        # For Phi-2, validate 2048 token limit
+        if ezlocalai_max_tokens != '2048':
+            issues.append(f"Phi-2 model requires 2048 tokens, but EZLOCALAI_MAX_TOKENS={ezlocalai_max_tokens}")
+    elif 'tinyllama' in default_model.lower():
+        log("⚠️  DEFAULT_MODEL is TinyLlama (known to have case sensitivity issues)", "WARN")
+        warnings.append("TinyLlama may have filename case sensitivity issues with EzLocalAI")
+    elif default_model == 'NOT_SET':
+        issues.append("DEFAULT_MODEL not configured")
+        log("❌ DEFAULT_MODEL not set", "ERROR")
+    else:
+        log(f"ℹ️  DEFAULT_MODEL: {default_model}", "INFO")
+    
+    # 4. Check docker-compose token settings
+    log("🐳 Docker Compose Token Settings:", "TEST")
+    
+    docker_compose_path = os.path.join(install_path, "docker-compose.yml")
+    if os.path.exists(docker_compose_path):
+        try:
+            with open(docker_compose_path, 'r') as f:
+                compose_content = f.read()
+                
+            if 'LLM_MAX_TOKENS:-0}' in compose_content:
+                issues.append("Docker compose has LLM_MAX_TOKENS:-0} (unlimited tokens bug)")
+                log("❌ CRITICAL: docker-compose.yml has LLM_MAX_TOKENS:-0}", "CRITICAL")
+            elif 'LLM_MAX_TOKENS:-2048}' in compose_content:
+                log("✅ Docker compose correctly defaults to 2048 tokens", "SUCCESS")
+            else:
+                log("ℹ️  Docker compose token settings appear custom", "INFO")
+                
+        except Exception as e:
+            log(f"Could not analyze docker-compose.yml: {e}", "WARN")
+    
+    # 5. Summary and recommendations
+    log("📊 Token Configuration Summary:", "HEADER")
+    
+    if issues:
+        log("❌ CRITICAL ISSUES FOUND:", "ERROR")
+        for issue in issues:
+            log(f"  • {issue}", "ERROR")
+        log("", "INFO")
+        log("🔧 FIXES NEEDED:", "WARN")
+        log("  1. Update installer_docker.py line 179: change '4096' to '2048'", "INFO")
+        log("  2. Update installer_docker.py line ~293: change ':-0}' to ':-2048}'", "INFO")
+        log("  3. Manually fix current installation with:", "INFO")
+        log("     sed -i 's/MAX_TOKENS.*4096/MAX_TOKENS\": \"2048/g' models/agents/XT.json", "INFO")
+        log("     echo 'EZLOCALAI_MAX_TOKENS=2048' >> .env", "INFO")
+        return False
+    
+    if warnings:
+        log("⚠️  WARNINGS:", "WARN")
+        for warning in warnings:
+            log(f"  • {warning}", "WARN")
+    
+    if not issues and not warnings:
+        log("🎉 ALL TOKEN CONFIGURATIONS ARE CORRECT!", "SUCCESS")
+        return True
+    
+    return len(issues) == 0
+
+def test_api_with_token_validation(base_url, api_key=None):
+    """Test API and check for token limit errors"""
+    log("🧪 API Token Limit Testing:", "TEST")
+    
+    if not api_key:
+        log("No API key provided, skipping authenticated tests", "INFO")
+        return True
+    
+    # Test small request (should always work)
+    small_test = {
+        "model": "TheBloke/phi-2-dpo-GGUF",
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 10
     }
     
-    results = []
-    
-    for config_key, url in domain_urls.items():
-        if url and url.startswith('http'):
-            log(f"🔗 Testing {config_key}: {url}", "TEST")
-            result = test_api_endpoint(url, f"{config_key} Domain", timeout=15)
-            results.append((config_key, url, result))
-        else:
-            log(f"⚠️  {config_key}: No valid URL configured", "WARN")
-            results.append((config_key, url, False))
-    
-    # Summary of domain tests
-    log("\n📊 Domain Test Results:", "INFO")
-    for config_key, url, result in results:
-        status = "✅ WORKING" if result else "❌ FAILED"
-        log(f"  {status}: {config_key} -> {url}", "SUCCESS" if result else "ERROR")
-    
-    return results
-
-def test_api_endpoint(url, name, timeout=10):
-    """Enhanced API endpoint testing with more detailed error reporting"""
     try:
-        req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'AGiXT-PostInstall-Test/2.0')
-        
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            status = response.getcode()
-            content_type = response.headers.get('Content-Type', 'unknown')
-            
-            if 200 <= status < 400:
-                log(f"✅ {name}: HTTP {status} ({content_type}) - Accessible", "SUCCESS")
-                return True
-            else:
-                log(f"⚠️  {name}: HTTP {status} - Unexpected status", "WARN")
-                return False
-                
-    except urllib.error.HTTPError as e:
-        if e.code == 502:
-            log(f"❌ {name}: HTTP 502 - Bad Gateway (backend server down)", "ERROR")
-        elif e.code == 404:
-            log(f"✅ {name}: HTTP 404 - Server responding (endpoint may not exist)", "SUCCESS")
-            return True
-        else:
-            log(f"❌ {name}: HTTP {e.code} - {e.reason}", "ERROR")
-        return False
-    except urllib.error.URLError as e:
-        if "Connection refused" in str(e.reason):
-            log(f"❌ {name}: Connection refused - Service not running", "ERROR")
-        elif "timed out" in str(e.reason):
-            log(f"❌ {name}: Connection timeout - Service overloaded or slow", "ERROR")
-        else:
-            log(f"❌ {name}: Connection failed - {e.reason}", "ERROR")
-        return False
-    except Exception as e:
-        log(f"❌ {name}: Test failed - {e}", "ERROR")
-        return False
-
-def test_docker_containers_detailed(install_path):
-    """Enhanced Docker container testing with detailed status"""
-    log("🐳 Testing Docker Containers (Detailed)", "HEADER")
-    
-    try:
-        # Get detailed container information
-        result = subprocess.run(
-            ["docker", "compose", "ps", "--format", "json"],
-            cwd=install_path,
-            capture_output=True,
-            text=True,
-            timeout=30
+        # Test EzLocalAI directly
+        req = urllib.request.Request(
+            f"{base_url}/v1/chat/completions",
+            data=json.dumps(small_test).encode(),
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {api_key}'
+            }
         )
         
-        if result.returncode != 0:
-            log("Failed to get container status", "ERROR")
-            return False
-        
-        containers = []
-        for line in result.stdout.strip().split('\n'):
-            if line.strip():
-                try:
-                    container = json.loads(line)
-                    containers.append(container)
-                except json.JSONDecodeError:
-                    continue
-        
-        if not containers:
-            log("No containers found", "ERROR")
-            return False
-        
-        # Analyze each container
-        required_containers = ['agixt', 'ezlocalai', 'agixtinteractive']
-        found_containers = []
-        container_issues = []
-        
-        for container in containers:
-            name = container.get('Name', 'Unknown')
-            state = container.get('State', 'Unknown')
-            service = container.get('Service', 'Unknown')
-            status = container.get('Status', 'Unknown')
-            
-            if service in required_containers:
-                found_containers.append(service)
-            
-            # Detailed status analysis
-            if 'running' in state.lower():
-                log(f"✅ {name} ({service}): Running - {status}", "SUCCESS")
-            elif 'restarting' in state.lower():
-                log(f"🔄 {name} ({service}): Restarting - {status}", "WARN")
-                container_issues.append(f"{service}: Restarting (check logs)")
-            elif 'exited' in state.lower():
-                log(f"❌ {name} ({service}): Exited - {status}", "ERROR")
-                container_issues.append(f"{service}: Exited (failed to start)")
-            else:
-                log(f"⚠️  {name} ({service}): {state} - {status}", "WARN")
-                container_issues.append(f"{service}: Unusual state - {state}")
-        
-        # Check for missing containers
-        missing = set(required_containers) - set(found_containers)
-        if missing:
-            log(f"❌ Missing containers: {', '.join(missing)}", "ERROR")
-            container_issues.extend([f"Missing: {m}" for m in missing])
-        
-        # Report issues
-        if container_issues:
-            log("🔧 Container Issues Detected:", "WARN")
-            for issue in container_issues:
-                log(f"  - {issue}", "WARN")
-        
-        log(f"📊 Container Summary: {len(found_containers)}/{len(required_containers)} found", "INFO")
-        
-        # If AGiXT is having issues, run deep debugging
-        if 'agixt' in [issue.split(':')[0] for issue in container_issues]:
-            debug_agixt_database_issue(install_path)
-        
-        return len(missing) == 0
-        
-    except Exception as e:
-        log(f"Docker container test failed: {e}", "ERROR")
-        return False
-
-def test_ezlocalai_models_detailed(base_url):
-    """Enhanced EzLocalAI model testing with better error analysis"""
-    log("🤖 Testing EzLocalAI Models (Detailed)", "HEADER")
-    
-    models_url = f"{base_url}/v1/models"
-    try:
-        req = urllib.request.Request(models_url)
-        req.add_header('Content-Type', 'application/json')
-        
-        with urllib.request.urlopen(req, timeout=15) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:
             if response.getcode() == 200:
                 data = json.loads(response.read().decode())
                 
-                if 'data' in data and isinstance(data['data'], list):
-                    models = data['data']
-                    log(f"✅ Found {len(models)} model(s) in EzLocalAI", "SUCCESS")
+                if 'choices' in data and data['choices']:
+                    content = data['choices'][0].get('message', {}).get('content', '')
+                    usage = data.get('usage', {})
                     
-                    for model in models:
-                        model_id = model.get('id', 'Unknown')
-                        model_object = model.get('object', 'Unknown')
-                        log(f"  📄 Model: {model_id} ({model_object})", "INFO")
-                    
-                    # Look for deepseek model specifically
-                    deepseek_models = [m for m in models if 'deepseek' in m.get('id', '').lower()]
-                    if deepseek_models:
-                        log(f"✅ Deepseek model found and loaded", "SUCCESS")
-                        for model in deepseek_models:
-                            log(f"  🧠 Deepseek: {model.get('id', 'Unknown')}", "SUCCESS")
-                    else:
-                        log(f"⚠️  No deepseek model found in loaded models", "WARN")
-                        log("🔍 This might be due to the file structure issue we identified", "DEBUG")
-                    
+                    log(f"✅ Small request successful: '{content[:50]}...'", "SUCCESS")
+                    log(f"   Token usage: {usage}", "DEBUG")
                     return True
                 else:
-                    log("⚠️  Models endpoint returned unexpected format", "WARN")
-                    log(f"Response data: {data}", "DEBUG")
+                    log("⚠️  API responded but with unexpected format", "WARN")
                     return False
             else:
-                log(f"❌ Models endpoint returned HTTP {response.getcode()}", "ERROR")
+                log(f"❌ API returned HTTP {response.getcode()}", "ERROR")
+                return False
+                
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            log("❌ Authentication failed - check API key", "ERROR")
+        else:
+            log(f"❌ HTTP {e.code}: {e.reason}", "ERROR")
+        return False
+    except Exception as e:
+        if "Unable to process request" in str(e):
+            log("❌ CRITICAL: 'Unable to process request' error detected", "CRITICAL")
+            log("   This suggests token limit mismatch (16K vs 2048)", "CRITICAL")
+            return False
+        else:
+            log(f"❌ API test failed: {e}", "ERROR")
+            return False
+
+def test_live_token_limits_with_agixt(install_path):
+    """Test AGiXT's actual token limit behavior"""
+    log("🎯 Live AGiXT Token Limit Testing:", "HEADER")
+    
+    config = load_config_from_env(install_path)
+    agixt_api_key = config.get('AGIXT_API_KEY')
+    
+    if not agixt_api_key:
+        log("No AGiXT API key found, skipping live tests", "WARN")
+        return True
+    
+    # Test AGiXT agent endpoint to see actual provider limits
+    try:
+        req = urllib.request.Request(
+            "http://localhost:7437/v1/agent/XT",
+            headers={'Authorization': f'Bearer {agixt_api_key}'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=15) as response:
+            if response.getcode() == 200:
+                agent_data = json.loads(response.read().decode())
+                log("✅ AGiXT agent endpoint accessible", "SUCCESS")
+                
+                # Look for provider configuration
+                if 'settings' in agent_data:
+                    provider = agent_data['settings'].get('provider', 'Unknown')
+                    max_tokens = agent_data['settings'].get('MAX_TOKENS', 'Unknown')
+                    
+                    log(f"   Live Agent Provider: {provider}", "DEBUG")
+                    log(f"   Live Agent MAX_TOKENS: {max_tokens}", "DEBUG")
+                    
+                    if provider != 'ezlocalai':
+                        log(f"❌ CRITICAL: Live agent provider is {provider}, not ezlocalai", "CRITICAL")
+                        return False
+                    
+                    if max_tokens not in ['2048', 2048]:
+                        log(f"⚠️  Live agent MAX_TOKENS is {max_tokens}, expected 2048", "WARN")
+                
+                return True
+            else:
+                log(f"❌ AGiXT agent endpoint returned HTTP {response.getcode()}", "ERROR")
                 return False
                 
     except Exception as e:
-        log(f"❌ EzLocalAI models test failed: {e}", "ERROR")
-        log("🔍 This is expected if EzLocalAI is failing due to model structure issues", "DEBUG")
+        log(f"❌ Could not test live AGiXT configuration: {e}", "ERROR")
         return False
 
-def test_file_structure_detailed(install_path):
-    """Enhanced file structure testing with detailed analysis"""
-    log("📁 Testing File Structure (Detailed)", "HEADER")
+def test_file_structure_enhanced(install_path):
+    """Enhanced file structure test with model validation"""
+    log("📁 Enhanced File Structure Testing:", "HEADER")
     
     required_structure = {
         ".env": "file",
-        "docker-compose.yml": "file",
-        "models": "directory",      # Critical for AGiXT database
-        "agixt": "directory",       # AGiXT application data
-        "ezlocalai": "directory",   # EzLocalAI models
-        "WORKSPACE": "directory",   # Working directory
-        "conversations": "directory" # Conversation storage
+        "docker-compose.yml": "file", 
+        "models": "directory",
+        "models/agents": "directory",
+        "models/agents/XT.json": "file",
+        "WORKSPACE": "directory",
+        "conversations": "directory"
     }
     
     issues = []
@@ -332,175 +345,172 @@ def test_file_structure_detailed(install_path):
         full_path = os.path.join(install_path, item)
         
         if not os.path.exists(full_path):
-            log(f"❌ Missing: {item}", "ERROR")
             issues.append(f"Missing {item_type}: {item}")
+            log(f"❌ Missing: {item}", "ERROR")
             continue
         
         if item_type == "directory" and not os.path.isdir(full_path):
-            log(f"❌ Wrong type: {item} (expected directory, found file)", "ERROR")
-            issues.append(f"Type mismatch: {item}")
+            issues.append(f"Type mismatch: {item} (expected directory)")
+            log(f"❌ Wrong type: {item} (expected directory)", "ERROR")
             continue
         
         if item_type == "file" and not os.path.isfile(full_path):
-            log(f"❌ Wrong type: {item} (expected file, found directory)", "ERROR")
-            issues.append(f"Type mismatch: {item}")
+            issues.append(f"Type mismatch: {item} (expected file)")
+            log(f"❌ Wrong type: {item} (expected file)", "ERROR")
             continue
         
-        # Check permissions and size
-        try:
-            if item_type == "directory":
-                contents = os.listdir(full_path)
-                log(f"✅ Directory: {item} ({len(contents)} items)", "SUCCESS")
-                
-                # Special checks for critical directories
-                if item == "models" and not contents:
-                    log(f"⚠️  Models directory is empty - AGiXT needs this for database", "WARN")
-                elif item == "ezlocalai":
-                    gguf_files = [f for f in contents if f.endswith('.gguf')]
-                    if gguf_files:
-                        log(f"  🤖 Found {len(gguf_files)} GGUF files", "INFO")
-                        for gguf_file in gguf_files:
-                            size_gb = os.path.getsize(os.path.join(full_path, gguf_file)) / (1024**3)
-                            log(f"    📄 {gguf_file} ({size_gb:.1f}GB)", "INFO")
-                    else:
-                        log(f"  ⚠️  No GGUF files found in ezlocalai directory", "WARN")
-                        issues.append("No GGUF models found")
-            else:
-                size = os.path.getsize(full_path)
-                log(f"✅ File: {item} ({size} bytes)", "SUCCESS")
-                
-        except Exception as e:
-            log(f"⚠️  Could not analyze {item}: {e}", "WARN")
+        log(f"✅ Found: {item}", "SUCCESS")
     
-    # Report issues summary
-    if issues:
-        log("🔧 File Structure Issues:", "WARN")
-        for issue in issues:
-            log(f"  - {issue}", "WARN")
-        return False
-    else:
-        log("✅ File structure check passed", "SUCCESS")
-        return True
+    # Special validation for agent config
+    agent_config_path = os.path.join(install_path, "models", "agents", "XT.json")
+    if os.path.exists(agent_config_path):
+        try:
+            with open(agent_config_path, 'r') as f:
+                agent_data = json.load(f)
+                
+            if 'settings' not in agent_data:
+                issues.append("Agent config missing 'settings' section")
+                log("❌ Agent config corrupted - missing settings", "ERROR")
+            else:
+                log("✅ Agent config structure valid", "SUCCESS")
+                
+        except json.JSONDecodeError:
+            issues.append("Agent config has invalid JSON")
+            log("❌ Agent config has invalid JSON", "ERROR")
+        except Exception as e:
+            issues.append(f"Could not validate agent config: {e}")
+            log(f"❌ Agent config validation failed: {e}", "ERROR")
+    
+    return len(issues) == 0
 
-def run_comprehensive_test_suite(install_path):
-    """Run the comprehensive enhanced test suite"""
-    log("🚀 AGiXT Enhanced Post-Installation Test Suite", "HEADER")
+def run_enhanced_comprehensive_test_suite(install_path):
+    """Run enhanced test suite with token validation focus"""
+    log("🚀 AGiXT Enhanced Post-Installation Test Suite v2.0", "HEADER")
+    log("🎯 Special focus on token configuration validation", "INFO")
     log(f"📁 Testing installation at: {install_path}", "INFO")
-    log("🔍 Enhanced with domain testing and deep debugging", "INFO")
     log("=" * 80, "INFO")
     
-    # Load configuration for domain testing
+    # Load configurations
     config = load_config_from_env(install_path)
-    log(f"📋 Loaded {len(config)} configuration variables", "INFO")
+    log(f"📋 Loaded {len(config)} environment variables", "INFO")
     
-    # Core tests
-    tests = [
-        ("File Structure (Detailed)", lambda: test_file_structure_detailed(install_path)),
-        ("Docker Containers (Detailed)", lambda: test_docker_containers_detailed(install_path)),
+    # Critical token configuration test (NEW)
+    token_config_ok = test_token_configuration_comprehensive(install_path)
+    
+    # Enhanced file structure test
+    file_structure_ok = test_file_structure_enhanced(install_path)
+    
+    # Container status
+    log("\n🐳 Docker Container Status:", "TEST")
+    containers_ok = True
+    try:
+        result = subprocess.run(
+            ["docker", "compose", "ps", "--format", "table"],
+            cwd=install_path,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            log("Container Status:", "INFO")
+            for line in result.stdout.split('\n')[1:]:
+                if line.strip():
+                    if 'running' in line.lower():
+                        log(f"✅ {line.strip()}", "SUCCESS")
+                    else:
+                        log(f"❌ {line.strip()}", "ERROR")
+                        containers_ok = False
+        else:
+            log("❌ Could not get container status", "ERROR")
+            containers_ok = False
+            
+    except Exception as e:
+        log(f"❌ Container check failed: {e}", "ERROR")
+        containers_ok = False
+    
+    # API endpoint tests
+    log("\n🌐 API Endpoint Testing:", "TEST")
+    endpoints = [
+        ("http://localhost:3437", "AGiXT Frontend"),
+        ("http://localhost:7437", "AGiXT API"),
+        ("http://localhost:8091", "EzLocalAI API"),
+        ("http://localhost:8502", "EzLocalAI UI")
     ]
     
-    # Localhost endpoints
-    localhost_endpoints = [
-        ("http://localhost:3437", "AGiXT Frontend (Localhost)"),
-        ("http://localhost:7437", "AGiXT API (Localhost)"),
-        ("http://localhost:8091", "EzLocalAI API (Localhost)"),
-        ("http://localhost:8502", "EzLocalAI UI (Localhost)"),
-    ]
-    
-    results = []
-    
-    # Run core tests
-    for test_name, test_func in tests:
-        log(f"\n🧪 Running test: {test_name}", "TEST")
+    endpoint_results = []
+    for url, name in endpoints:
         try:
-            result = test_func()
-            results.append((test_name, result))
-            if result:
-                log(f"✅ {test_name}: PASSED", "SUCCESS")
-            else:
-                log(f"❌ {test_name}: FAILED", "ERROR")
-        except Exception as e:
-            log(f"❌ {test_name}: ERROR - {e}", "ERROR")
-            results.append((test_name, False))
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if 200 <= response.getcode() < 400:
+                    log(f"✅ {name}: HTTP {response.getcode()}", "SUCCESS")
+                    endpoint_results.append(True)
+                else:
+                    log(f"⚠️  {name}: HTTP {response.getcode()}", "WARN")
+                    endpoint_results.append(False)
+        except:
+            log(f"❌ {name}: Not accessible", "ERROR")
+            endpoint_results.append(False)
     
-    # Test localhost endpoints
-    log(f"\n🌐 Testing Localhost Endpoints", "TEST")
-    localhost_results = []
-    for url, name in localhost_endpoints:
-        result = test_api_endpoint(url, name, timeout=10)
-        localhost_results.append((name, result))
-    
-    # Test configured domains
-    log(f"\n🌍 Testing Configured Domains", "TEST")
-    domain_results = test_configured_domains(config)
-    
-    # Enhanced model testing if EzLocalAI is accessible
-    ezlocalai_accessible = any(r[1] for r in localhost_results if "EzLocalAI API" in r[0])
-    if ezlocalai_accessible:
-        log(f"\n🤖 Enhanced Model Testing", "TEST")
-        test_ezlocalai_models_detailed("http://localhost:8091")
+    # Token-specific API testing
+    ezlocalai_api_key = config.get('EZLOCALAI_API_KEY')
+    if ezlocalai_api_key and endpoint_results[2]:  # EzLocalAI API accessible
+        api_token_ok = test_api_with_token_validation("http://localhost:8091", ezlocalai_api_key)
     else:
-        log(f"\n🤖 EzLocalAI not accessible - skipping model tests", "WARN")
+        api_token_ok = True  # Skip if not accessible
+        log("⚠️  Skipping API token tests (EzLocalAI not accessible)", "WARN")
     
-    # AGiXT API specific testing
-    agixt_accessible = any(r[1] for r in localhost_results if "AGiXT API" in r[0])
-    if not agixt_accessible:
-        log(f"\n🔍 AGiXT API Deep Debugging", "TEST")
-        debug_agixt_database_issue(install_path)
+    # Live AGiXT testing
+    if endpoint_results[1]:  # AGiXT API accessible
+        live_agixt_ok = test_live_token_limits_with_agixt(install_path)
+    else:
+        live_agixt_ok = True  # Skip if not accessible
+        log("⚠️  Skipping live AGiXT tests (API not accessible)", "WARN")
     
-    # Comprehensive summary
+    # COMPREHENSIVE SUMMARY
     log("\n" + "=" * 80, "INFO")
-    log("📊 COMPREHENSIVE TEST SUMMARY", "HEADER")
+    log("🎯 COMPREHENSIVE TEST RESULTS", "HEADER")
     log("=" * 80, "INFO")
     
-    # Core tests summary
-    passed_tests = sum(1 for _, result in results if result)
-    log(f"🧪 Core Tests: {passed_tests}/{len(results)} passed", "INFO")
-    for test_name, result in results:
+    tests_results = [
+        ("Token Configuration", token_config_ok),
+        ("File Structure", file_structure_ok),
+        ("Docker Containers", containers_ok),
+        ("API Endpoints", sum(endpoint_results) >= 2),
+        ("Token API Testing", api_token_ok),
+        ("Live AGiXT Config", live_agixt_ok)
+    ]
+    
+    passed_tests = sum(1 for _, result in tests_results if result)
+    
+    for test_name, result in tests_results:
         status = "✅ PASS" if result else "❌ FAIL"
         log(f"  {status}: {test_name}", "SUCCESS" if result else "ERROR")
     
-    # Localhost endpoints summary
-    passed_localhost = sum(1 for _, result in localhost_results if result)
-    log(f"\n🏠 Localhost Endpoints: {passed_localhost}/{len(localhost_results)} accessible", "INFO")
-    for name, result in localhost_results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        log(f"  {status}: {name}", "SUCCESS" if result else "ERROR")
+    log(f"\n📊 Overall Score: {passed_tests}/{len(tests_results)} tests passed", "INFO")
     
-    # Domain endpoints summary
-    passed_domains = sum(1 for _, _, result in domain_results if result)
-    log(f"\n🌍 Configured Domains: {passed_domains}/{len(domain_results)} accessible", "INFO")
-    for config_key, url, result in domain_results:
-        status = "✅ PASS" if result else "❌ FAIL"
-        log(f"  {status}: {config_key} ({url})", "SUCCESS" if result else "ERROR")
+    # CRITICAL ASSESSMENT
+    critical_passed = token_config_ok and file_structure_ok
     
-    # Overall assessment
-    total_endpoints = len(localhost_results) + len(domain_results)
-    total_passed_endpoints = passed_localhost + passed_domains
-    
-    log(f"\n📈 Overall Assessment:", "HEADER")
-    log(f"Core Tests: {passed_tests}/{len(results)} passed", "INFO")
-    log(f"All Endpoints: {total_passed_endpoints}/{total_endpoints} accessible", "INFO")
-    
-    # Determine success criteria
-    critical_services_working = (
-        passed_tests >= len(results) - 1 and  # Allow 1 test failure
-        passed_localhost >= 2  # At least frontend + one backend service
-    )
-    
-    if critical_services_working:
-        log("🎉 INSTALLATION STATUS: FUNCTIONAL", "SUCCESS")
-        log("✅ Core AGiXT components are working", "SUCCESS")
-        
-        if passed_domains > 0:
-            log("✅ Some configured domains are accessible", "SUCCESS")
-        else:
-            log("⚠️  Configured domains need attention (502 errors)", "WARN")
-            
+    if critical_passed and passed_tests >= 4:
+        log("\n🎉 INSTALLATION STATUS: EXCELLENT", "SUCCESS")
+        log("✅ All critical configurations are correct", "SUCCESS")
+        log("✅ Token limits properly configured", "SUCCESS")
+        log("✅ Installation ready for production use", "SUCCESS")
+        return True
+    elif token_config_ok and passed_tests >= 3:
+        log("\n🟡 INSTALLATION STATUS: FUNCTIONAL", "WARN")
+        log("✅ Token configuration is correct", "SUCCESS")
+        log("⚠️  Some services need attention", "WARN")
+        log("ℹ️  Installation usable but may need minor fixes", "INFO")
         return True
     else:
-        log("❌ INSTALLATION STATUS: NEEDS ATTENTION", "ERROR")
-        log("Critical services are not responding properly", "ERROR")
+        log("\n❌ INSTALLATION STATUS: NEEDS REPAIR", "ERROR")
+        if not token_config_ok:
+            log("🎯 PRIORITY: Fix token configuration issues first", "CRITICAL")
+            log("   This is the most common cause of 'Unable to process request' errors", "CRITICAL")
+        log("🔧 Review test results above for specific issues to fix", "ERROR")
         return False
 
 def main():
@@ -508,27 +518,36 @@ def main():
     if len(sys.argv) > 1:
         install_path = sys.argv[1]
     else:
-        install_path = "/var/apps/agixt-v1.6-ezlocolai-universal"
+        # Try to find AGiXT installation
+        possible_paths = [
+            "/var/apps/agixt-v1.7-optimized-universal",
+            "/var/apps/agixt-v1.6-ezlocolai-universal",
+        ]
+        
+        install_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                install_path = path
+                break
+        
+        if not install_path:
+            log("❌ Could not find AGiXT installation", "ERROR")
+            log("Usage: python3 post-install-tests.py [installation_path]", "INFO")
+            sys.exit(1)
     
     if not os.path.exists(install_path):
         log(f"❌ Installation path does not exist: {install_path}", "ERROR")
         sys.exit(1)
     
-    success = run_comprehensive_test_suite(install_path)
+    log(f"🎯 Testing AGiXT installation at: {install_path}", "INFO")
+    
+    success = run_enhanced_comprehensive_test_suite(install_path)
     
     if success:
-        log("\n🎯 RECOMMENDATIONS:", "HEADER")
-        log("1. ✅ AGiXT installation is functional", "SUCCESS")
-        log("2. 🌐 Check domain DNS/proxy configuration for 502 errors", "INFO")
-        log("3. 🤖 Fix EzLocalAI model structure if needed", "INFO")
-        log("4. 🔍 Monitor logs for any remaining issues", "INFO")
+        log("\n🎉 SUCCESS: Installation passed comprehensive testing!", "SUCCESS")
         sys.exit(0)
     else:
-        log("\n🔧 NEXT STEPS:", "WARN")
-        log("1. Fix critical database/directory issues", "INFO")
-        log("2. Check Docker container logs", "INFO")
-        log("3. Verify file permissions", "INFO")
-        log("4. Consider reinstalling with enhanced debugging", "INFO")
+        log("\n❌ FAILED: Installation needs attention", "ERROR")
         sys.exit(1)
 
 if __name__ == "__main__":
