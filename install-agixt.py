@@ -405,14 +405,20 @@ def main():
         except:
             pass
 
-# --- AGiXT Agent Activation (safe post-install hook) ---
+# --- AGiXT Agent Activation (strict blocking) ---
 import requests
 import time
+from dotenv import load_dotenv
 
-def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437", api_key="agixt-secure-key"):
+def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437"):
     print(f"🧠 Waiting for agent '{agent_name}' to be created...")
 
-    for attempt in range(10):
+    # Load API key from .env file
+    load_dotenv()
+    import os
+    api_key = os.getenv("AGIXT_API_KEY", "agixt-secure-key")
+
+    while True:
         try:
             res = requests.get(
                 f"{base_url}/api/agent",
@@ -421,26 +427,28 @@ def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437", api_key
             if res.status_code == 200:
                 agents = res.json()
                 if agent_name in agents:
-                    print(f"✅ Agent '{agent_name}' found. Activating...")
+                    print(f"✅ Agent '{agent_name}' found. Proceeding to activation...")
                     break
+            else:
+                print(f"⚠️ Unexpected response ({res.status_code}): {res.text}")
         except Exception as e:
-            print(f"⏳ Waiting for agent to appear... {e}")
+            print(f"⏳ Waiting for backend... {e}")
         time.sleep(3)
-    else:
-        print("❌ Agent was not found after timeout. Skipping activation.")
-        return
 
-    try:
-        res = requests.post(
-            f"{base_url}/api/agent/{agent_name}/toggle_status",
-            headers={"Authorization": api_key}
-        )
-        if res.status_code == 200:
-            print(f"✅ Agent '{agent_name}' activated successfully.")
-        else:
-            print(f"⚠️ Agent activation failed: {res.status_code} - {res.text}")
-    except Exception as e:
-        print(f"❌ Failed to activate agent: {e}")
+    while True:
+        try:
+            res = requests.post(
+                f"{base_url}/api/agent/{agent_name}/toggle_status",
+                headers={"Authorization": api_key}
+            )
+            if res.status_code == 200:
+                print(f"✅ Agent '{agent_name}' activated successfully.")
+                break
+            else:
+                print(f"⚠️ Activation failed: {res.status_code} - {res.text}. Retrying...")
+        except Exception as e:
+            print(f"❌ Error during activation: {e}")
+        time.sleep(3)
 
 if __name__ == "__main__":
     main()
