@@ -404,5 +404,31 @@ def main():
         except:
             pass
 
+
+import requests
+import time
+
+def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437", api_key="agixt-secure-key"):
+    print(f"🧠 Activating agent '{agent_name}'...")
+
+    for _ in range(10):  # Retry loop in case backend takes time
+        try:
+            res = requests.post(
+                f"{base_url}/api/agent/{agent_name}/toggle_status",
+                headers={"Authorization": api_key}
+            )
+            if res.status_code == 200:
+                print(f"✅ Agent '{agent_name}' activated successfully.")
+                return
+            else:
+                print(f"⚠️ Agent activation failed: {res.status_code} - {res.text}")
+        except Exception as e:
+            print(f"⏳ Waiting for backend... {e}")
+        time.sleep(3)
+
+    print("❌ Failed to activate agent after multiple attempts.")
+
+
 if __name__ == "__main__":
+    activate_agent()
     main()
