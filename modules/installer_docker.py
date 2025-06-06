@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module (PRODUCTION READY - Fixed Token Limits)
-========================================================================
+AGiXT Installer - Docker Module (PRODUCTION READY - Fixed Token Limits + Agent Registration)
+=============================================================================================
 
 FIXES APPLIED:
 - Differentiated token limits (Agent: 4096, EzLocalAI: 8192)
@@ -9,6 +9,7 @@ FIXES APPLIED:
 - API key environment fix
 - Production-ready error handling
 - No more infinite retry loops that freeze the system
+- NEW v1.7.1: Agent registration via API after startup
 
 This prevents the "Unable to process request" bug that causes system hangs.
 """
@@ -245,6 +246,63 @@ def create_agent_configuration(install_path, config):
         
     except Exception as e:
         log(f"❌ Error creating agent configuration: {e}", "ERROR")
+        return False
+
+def ensure_agent_registration(install_path, config):
+    """NEW v1.7.1: Ensure agent is properly registered in AGiXT after startup"""
+    import urllib.request
+    import json
+    
+    agent_name = config.get('AGIXT_AGENT', 'AutomationAssistant')
+    api_key = config.get('AGIXT_API_KEY')
+    
+    log(f"👤 v1.7.1: Registering agent: {agent_name}")
+    
+    # Wait for AGiXT to be fully ready
+    log("⏳ Waiting 90 seconds for AGiXT to be ready...")
+    time.sleep(90)
+    
+    # Register the agent via API
+    try:
+        # Prepare the request
+        data = json.dumps({"agent_name": agent_name, "settings": {}}).encode('utf-8')
+        req = urllib.request.Request(
+            "http://localhost:7437/api/agent",
+            data=data,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
+            method="POST"
+        )
+        
+        # Make the request
+        with urllib.request.urlopen(req, timeout=30) as response:
+            if response.getcode() == 200:
+                log(f"✅ Agent {agent_name} registered successfully", "SUCCESS")
+                
+                # Verify agent exists
+                time.sleep(5)
+                verify_req = urllib.request.Request(
+                    f"http://localhost:7437/api/agent/{agent_name}",
+                    headers={"Authorization": f"Bearer {api_key}"}
+                )
+                
+                with urllib.request.urlopen(verify_req, timeout=15) as verify_response:
+                    if verify_response.getcode() == 200:
+                        log(f"✅ Agent {agent_name} verification successful", "SUCCESS")
+                        return True
+                    else:
+                        log(f"⚠️ Agent verification returned: {verify_response.getcode()}", "WARN")
+                        return False
+                        
+            else:
+                log(f"⚠️ Agent registration returned: {response.getcode()}", "WARN")
+                return False
+                
+    except Exception as e:
+        log(f"⚠️ Agent registration failed: {e}", "WARN")
+        log("💡 Agent file exists but may need manual registration", "INFO")
         return False
 
 def create_configuration(install_path, config):
@@ -545,6 +603,10 @@ def start_services(install_path, config):
                             log(f"   ⚠️ {line.strip()}")
         except:
             log("⚠️ Could not check final service status", "WARN")
+        
+        # NEW v1.7.1: Register agent after services are ready
+        log("👤 Ensuring agent registration...")
+        ensure_agent_registration(install_path, config)
         
         log("🎉 PRODUCTION service startup complete!", "SUCCESS")
         log("📋 Next step: Run post-install-tests.py for validation", "INFO")
