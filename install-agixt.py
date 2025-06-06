@@ -404,31 +404,46 @@ def main():
         except:
             pass
 
+if __name__ == "__main__":
+    main()
+
+
+# --- AGiXT Agent Activation (safe post-install hook) ---
 
 import requests
 import time
 
 def activate_agent(agent_name="AGiXT", base_url="http://localhost:7437", api_key="agixt-secure-key"):
-    print(f"🧠 Activating agent '{agent_name}'...")
+    print(f"🧠 Waiting for agent '{agent_name}' to be created...")
 
-    for _ in range(10):  # Retry loop in case backend takes time
+    for attempt in range(10):
         try:
-            res = requests.post(
-                f"{base_url}/api/agent/{agent_name}/toggle_status",
+            res = requests.get(
+                f"{base_url}/api/agent",
                 headers={"Authorization": api_key}
             )
             if res.status_code == 200:
-                print(f"✅ Agent '{agent_name}' activated successfully.")
-                return
-            else:
-                print(f"⚠️ Agent activation failed: {res.status_code} - {res.text}")
+                agents = res.json()
+                if agent_name in agents:
+                    print(f"✅ Agent '{agent_name}' found. Activating...")
+                    break
         except Exception as e:
-            print(f"⏳ Waiting for backend... {e}")
+            print(f"⏳ Waiting for agent to appear... {e}")
         time.sleep(3)
+    else:
+        print("❌ Agent was not found after timeout. Skipping activation.")
+        return
 
-    print("❌ Failed to activate agent after multiple attempts.")
+    try:
+        res = requests.post(
+            f"{base_url}/api/agent/{agent_name}/toggle_status",
+            headers={"Authorization": api_key}
+        )
+        if res.status_code == 200:
+            print(f"✅ Agent '{agent_name}' activated successfully.")
+        else:
+            print(f"⚠️ Agent activation failed: {res.status_code} - {res.text}")
+    except Exception as e:
+        print(f"❌ Failed to activate agent: {e}")
 
-
-if __name__ == "__main__":
-    activate_agent()
-    main()
+activate_agent()
