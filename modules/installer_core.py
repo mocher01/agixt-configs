@@ -204,14 +204,9 @@ def run_simplified_installation(config_name, github_token, skip_cleanup):
                     log("✅ AGiXT repository cloned successfully")
                         
                 elif step_name == "Setting up models":
-                    if not install_path or not config:
-                        log("❌ Install path and config required for this step", "ERROR")
-                        return False
-                    log("🤖 Starting simplified model setup...", "INFO")
-                    if not installer_models.setup_models(install_path, config):
-                        log("❌ Model setup failed", "ERROR")
-                        return False
-                    log("✅ Model setup completed successfully")
+                    # v1.7.2: SKIP model setup completely (no EzLocalAI)
+                    log("🚫 Skipping model setup - no EzLocalAI installation", "INFO")
+                    log("✅ Model setup skipped successfully")
                         
                 elif step_name == "Creating Docker configuration":
                     if not install_path or not config:
