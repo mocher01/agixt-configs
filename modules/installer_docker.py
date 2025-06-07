@@ -664,3 +664,40 @@ def test_module():
     test_config = {
         'MODEL_NAME': 'phi-2',
         'AGIXT_AGENT': 'AutomationAssistant'
+    }
+    
+    vars = generate_all_variables(test_config)
+    
+    # Check PRODUCTION fixes
+    if vars.get('DEFAULT_MODEL') == 'TheBloke/phi-2-dpo-GGUF':
+        log("DEFAULT_MODEL fix: ✓", "SUCCESS")
+    else:
+        log("DEFAULT_MODEL fix: ✗", "ERROR")
+    
+    if vars.get('AGIXT_AGENT') == 'AutomationAssistant':
+        log("AGIXT_AGENT preservation: ✓", "SUCCESS")
+    else:
+        log("AGIXT_AGENT preservation: ✗", "ERROR")
+    
+    # Check CRITICAL token differentiation
+    agent_tokens = vars.get('AGENT_MAX_TOKENS', '0')
+    ezlocalai_tokens = vars.get('EZLOCALAI_MAX_TOKENS', '0')
+    
+    if agent_tokens == '4096' and ezlocalai_tokens == '8192':
+        log("Token differentiation: ✓", "SUCCESS")
+        log("   Agent: 4096, EzLocalAI: 8192 (prevents hangs)", "SUCCESS")
+    else:
+        log("Token differentiation: ✗", "ERROR")
+        log(f"   Agent: {agent_tokens}, EzLocalAI: {ezlocalai_tokens}", "ERROR")
+    
+    # Check context management variables
+    if vars.get('MAX_RETRY_ATTEMPTS') == '3':
+        log("Context management: ✓", "SUCCESS")
+    else:
+        log("Context management: ✗", "ERROR")
+    
+    log("✅ PRODUCTION installer_docker module test completed", "SUCCESS")
+    return True
+
+if __name__ == "__main__":
+    test_module()
