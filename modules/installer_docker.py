@@ -252,8 +252,9 @@ def ensure_agent_registration(install_path, config):
     agent_name = config.get('AGIXT_AGENT', 'AutomationAssistant')
     api_key = config.get('AGIXT_API_KEY')
     
-    log(f"👤 FIXED: Registering agent via API: {agent_name}")
-    
+    log(f"👤 Registering agent via API: {agent_name}")
+    log("🔑 Using API key authentication (AGIXT_REQUIRE_API_KEY=true)")
+
     # Wait longer for AGiXT to be fully ready
     log("⏳ Waiting 120 seconds for AGiXT to be fully ready...")
     time.sleep(120)
@@ -411,7 +412,7 @@ services:
       APP_URI: ${{APP_URI:-http://localhost:3437}}
       AGIXT_AGENT: ${{AGIXT_AGENT:-XT}}
       AGIXT_AGENT_PROVIDER: ezlocalai
-      AGIXT_REQUIRE_API_KEY: ${{AGIXT_REQUIRE_API_KEY:-false}}
+      AGIXT_REQUIRE_API_KEY: ${{AGIXT_REQUIRE_API_KEY:-true}}
       WORKING_DIRECTORY: ${{WORKING_DIRECTORY:-/agixt/WORKSPACE}}
       REGISTRATION_DISABLED: ${{REGISTRATION_DISABLED:-false}}
       TOKENIZERS_PARALLELISM: "false"
