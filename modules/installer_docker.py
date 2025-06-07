@@ -363,6 +363,7 @@ networks:
 services:
   agixt:
     image: joshxt/agixt:main
+    command: ["python3", "app.py"]
     init: true
     restart: unless-stopped
     environment:
