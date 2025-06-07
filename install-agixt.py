@@ -39,7 +39,7 @@ def download_and_run_post_install_tests(install_path, skip_tests=False, github_t
         test_content = ""
         
         req = urllib.request.Request(test_url)
-        req.add_header('User-Agent', 'AGiXT-Installer/1.7')
+        req.add_header('User-Agent', 'AGiXT-Installer/1.7.1')  # FIX 1: Updated version
         if github_token:
             req.add_header('Authorization', 'token ' + github_token)
         
@@ -205,7 +205,7 @@ def download_file(url, target_path, github_token=None):
     """Download file with authentication for private repository"""
     try:
         req = urllib.request.Request(url)
-        req.add_header('User-Agent', 'AGiXT-Installer/1.7')
+        req.add_header('User-Agent', 'AGiXT-Installer/1.7.1')  # FIX 2: Updated version
         if github_token:
             req.add_header('Authorization', 'token ' + github_token)
         
@@ -219,7 +219,7 @@ def download_file(url, target_path, github_token=None):
         return False
 
 def main():
-    log("🚀 AGiXT Installer v1.7 - ENTERPRISE EDITION")
+    log("🚀 AGiXT Installer v1.7.1 - ENTERPRISE EDITION")  # FIX 3: Updated version
     log("🔧 Optimized for 16GB servers with enhanced chat experience")
     log("🔒 Private repository with GitHub token authentication")
     
