@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 """
-AGiXT Installer - Docker Module (PRODUCTION READY - Fixed Token Limits + Agent Registration)
-=============================================================================================
+AGiXT Installer - Docker Module (PRODUCTION READY v1.7.1 - Enhanced Agent Registration)
+===========================================================================================
 
-FIXES APPLIED:
+FIXES APPLIED IN v1.7.1:
 - Differentiated token limits (Agent: 4096, EzLocalAI: 8192)
 - Proper context management variables
 - API key environment fix
 - Production-ready error handling
 - No more infinite retry loops that freeze the system
-- NEW v1.7.1: Agent registration via API after startup
+- ENHANCED v1.7.1: Robust agent registration with retry logic and validation
+- ENHANCED v1.7.1: API readiness validation before registration attempts
+- ENHANCED v1.7.1: File-to-database import fallback mechanism
+- ENHANCED v1.7.1: Mandatory installation validation
 
-This prevents the "Unable to process request" bug that causes system hangs.
+This prevents the "Unable to process request" bug and ensures agent registration succeeds.
 """
 
 import os
 import subprocess
 import time
+import urllib.request
+import urllib.error
+import json
 from installer_utils import log, generate_secure_api_key
 
 def generate_all_variables(config):
@@ -232,7 +238,6 @@ def create_agent_configuration(install_path, config):
         }
         
         # Write agent configuration
-        import json
         with open(agent_file, 'w') as f:
             json.dump(agent_config, f, indent=2)
         
@@ -248,62 +253,172 @@ def create_agent_configuration(install_path, config):
         log(f"❌ Error creating agent configuration: {e}", "ERROR")
         return False
 
-def ensure_agent_registration(install_path, config):
-    """NEW v1.7.1: Ensure agent is properly registered in AGiXT after startup"""
-    import urllib.request
-    import json
+def import_agent_from_file(install_path, config):
+    """ENHANCED v1.7.1: Fallback - Import agent configuration from file to database"""
+    agent_name = config.get('AGIXT_AGENT')
+    if not agent_name:
+        return False
     
-    agent_name = config.get('AGIXT_AGENT', 'AutomationAssistant')
-    api_key = config.get('AGIXT_API_KEY')
+    agent_file = os.path.join(install_path, "models", "agents", f"{agent_name}.json")
     
-    log(f"👤 v1.7.1: Registering agent: {agent_name}")
+    if not os.path.exists(agent_file):
+        log(f"❌ Agent file not found: {agent_file}", "ERROR")
+        return False
     
-    # Wait for AGiXT to be fully ready
-    log("⏳ Waiting 90 seconds for AGiXT to be ready...")
-    time.sleep(90)
-    
-    # Register the agent via API
     try:
-        # Prepare the request
-        data = json.dumps({"agent_name": agent_name, "settings": {}}).encode('utf-8')
+        with open(agent_file, 'r') as f:
+            agent_config = json.load(f)
+        
+        # Import via AGiXT's internal database API
+        api_key = config.get('AGIXT_API_KEY')
+        
+        # Use PUT method to force create/update
+        data = json.dumps({
+            "agent_name": agent_name,
+            "settings": agent_config.get("settings", {}),
+            "commands": agent_config.get("commands", {}),
+            "training_urls": agent_config.get("training_urls", [])
+        }).encode('utf-8')
+        
         req = urllib.request.Request(
-            "http://localhost:7437/api/agent",
+            f"http://localhost:7437/api/agent/{agent_name}",
             data=data,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json"
             },
-            method="POST"
+            method="PUT"
         )
         
-        # Make the request
         with urllib.request.urlopen(req, timeout=30) as response:
-            if response.getcode() == 200:
-                log(f"✅ Agent {agent_name} registered successfully", "SUCCESS")
-                
-                # Verify agent exists
-                time.sleep(5)
-                verify_req = urllib.request.Request(
-                    f"http://localhost:7437/api/agent/{agent_name}",
-                    headers={"Authorization": f"Bearer {api_key}"}
-                )
-                
-                with urllib.request.urlopen(verify_req, timeout=15) as verify_response:
-                    if verify_response.getcode() == 200:
-                        log(f"✅ Agent {agent_name} verification successful", "SUCCESS")
-                        return True
-                    else:
-                        log(f"⚠️ Agent verification returned: {verify_response.getcode()}", "WARN")
-                        return False
-                        
-            else:
-                log(f"⚠️ Agent registration returned: {response.getcode()}", "WARN")
-                return False
+            if response.getcode() in [200, 201]:
+                log(f"✅ Agent {agent_name} imported from file successfully")
+                return True
                 
     except Exception as e:
-        log(f"⚠️ Agent registration failed: {e}", "WARN")
-        log("💡 Agent file exists but may need manual registration", "INFO")
+        log(f"❌ Agent import failed: {e}", "ERROR")
+    
+    return False
+
+def ensure_agent_registration(install_path, config):
+    """ENHANCED v1.7.1: Robust agent registration with retry logic and validation"""
+    
+    agent_name = config.get('AGIXT_AGENT')  # FIX 4: No fallback - use config value only
+    api_key = config.get('AGIXT_API_KEY')
+    
+    if not agent_name:
+        log("❌ AGIXT_AGENT not found in config - skipping registration", "ERROR")
         return False
+    
+    if not api_key:
+        log("❌ AGIXT_API_KEY not found in config - skipping registration", "ERROR")
+        return False
+    
+    log(f"👤 v1.7.1: Enhanced agent registration for: {agent_name}")
+    
+    # ENHANCED: Wait for API server with health checks
+    log("🏥 Waiting for API server to be fully ready...")
+    max_wait_attempts = 6  # 6 attempts = 3 minutes
+    api_ready = False
+    
+    for attempt in range(max_wait_attempts):
+        try:
+            # Test API health first
+            health_req = urllib.request.Request("http://localhost:7437/")
+            with urllib.request.urlopen(health_req, timeout=10) as response:
+                if response.getcode() == 200:
+                    log(f"✅ API server ready after {attempt * 30} seconds")
+                    api_ready = True
+                    break
+        except Exception as e:
+            log(f"⏳ API not ready, waiting... (attempt {attempt + 1}/{max_wait_attempts})")
+            time.sleep(30)
+    
+    if not api_ready:
+        log("❌ API server never became ready - registration failed", "ERROR")
+        return False
+    
+    # ENHANCED: Agent registration with retry logic
+    log(f"🔄 Starting enhanced registration process for {agent_name}")
+    max_retries = 3
+    registration_success = False
+    
+    for retry in range(max_retries):
+        try:
+            # Check if agent already exists first
+            log(f"🔍 Checking if agent {agent_name} already exists...")
+            check_req = urllib.request.Request(
+                f"http://localhost:7437/api/agent/{agent_name}",
+                headers={"Authorization": f"Bearer {api_key}"}
+            )
+            
+            try:
+                with urllib.request.urlopen(check_req, timeout=15) as response:
+                    if response.getcode() == 200:
+                        log(f"✅ Agent {agent_name} already exists and accessible")
+                        registration_success = True
+                        break
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    # Agent doesn't exist, proceed with registration
+                    log(f"📝 Agent {agent_name} not found - proceeding with registration")
+                elif e.code == 401:
+                    log(f"🔑 Authentication issue - checking API key", "WARN")
+                    raise Exception("API authentication failed")
+                else:
+                    raise
+            
+            # Register the agent
+            log(f"📤 Registering agent {agent_name} via API...")
+            data = json.dumps({"agent_name": agent_name, "settings": {}}).encode('utf-8')
+            req = urllib.request.Request(
+                "http://localhost:7437/api/agent",
+                data=data,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                if response.getcode() in [200, 201]:
+                    log(f"✅ Agent {agent_name} registered successfully")
+                    
+                    # ENHANCED: Verify registration worked
+                    log(f"🔍 Verifying agent {agent_name} registration...")
+                    time.sleep(5)
+                    verify_req = urllib.request.Request(
+                        f"http://localhost:7437/api/agent/{agent_name}",
+                        headers={"Authorization": f"Bearer {api_key}"}
+                    )
+                    
+                    with urllib.request.urlopen(verify_req, timeout=15) as verify_response:
+                        if verify_response.getcode() == 200:
+                            log(f"✅ Agent {agent_name} verification successful")
+                            registration_success = True
+                            break
+                        else:
+                            raise Exception(f"Verification failed: {verify_response.getcode()}")
+                else:
+                    raise Exception(f"Registration failed: {response.getcode()}")
+                    
+        except Exception as e:
+            log(f"⚠️ Registration attempt {retry + 1} failed: {e}", "WARN")
+            if retry < max_retries - 1:
+                log(f"🔄 Retrying in 10 seconds...", "INFO")
+                time.sleep(10)
+            else:
+                log(f"❌ All registration attempts failed for {agent_name}", "ERROR")
+    
+    # ENHANCED: If registration fails, try file import fallback
+    if not registration_success:
+        log("🔄 Attempting fallback: import agent from file...")
+        import_success = import_agent_from_file(install_path, config)
+        if import_success:
+            registration_success = True
+    
+    return registration_success
 
 def create_configuration(install_path, config):
     """Create PRODUCTION-READY Docker configuration"""
@@ -344,7 +459,7 @@ def create_configuration(install_path, config):
         log("📄 Creating PRODUCTION .env file...")
         
         with open(env_path, 'w') as f:
-            f.write("# AGiXT PRODUCTION Configuration\n")
+            f.write("# AGiXT PRODUCTION Configuration v1.7.1\n")
             f.write("# Fixed token limits prevent system hangs\n")
             f.write("# Agent tokens < EzLocalAI tokens prevents infinite loops\n\n")
             
@@ -494,7 +609,7 @@ services:
         return False
 
 def start_services(install_path, config):
-    """Start services with PRODUCTION configuration and monitoring"""
+    """Start services with PRODUCTION configuration and enhanced monitoring"""
     
     try:
         log("🚀 Starting services with PRODUCTION configuration...")
@@ -563,7 +678,6 @@ def start_services(install_path, config):
                 )
                 
                 if result.returncode == 0:
-                    import json
                     services = []
                     for line in result.stdout.strip().split('\n'):
                         if line.strip():
@@ -605,9 +719,16 @@ def start_services(install_path, config):
         except:
             log("⚠️ Could not check final service status", "WARN")
         
-        # NEW v1.7.1: Register agent after services are ready
-        log("👤 Ensuring agent registration...")
-        ensure_agent_registration(install_path, config)
+        # ENHANCED v1.7.1: Mandatory agent registration with validation
+        log("👤 Starting enhanced agent registration...")
+        registration_success = ensure_agent_registration(install_path, config)
+        
+        # FIX 5: MANDATORY VALIDATION - Fail installation if agent registration fails
+        if not registration_success:
+            log("❌ CRITICAL: Agent registration failed - installation incomplete", "ERROR")
+            log("💡 Agent file exists but agent not accessible via API", "ERROR")
+            log("🔧 Manual intervention required to complete installation", "ERROR")
+            return False  # ← FAIL the installation instead of continuing
         
         log("🎉 PRODUCTION service startup complete!", "SUCCESS")
         log("📋 Next step: Run post-install-tests.py for validation", "INFO")
