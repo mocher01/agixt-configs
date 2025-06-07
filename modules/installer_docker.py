@@ -185,10 +185,10 @@ services:
       NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED}
       AGIXT_AGENT: ${AGIXT_AGENT:-XT}
       AGIXT_FOOTER_MESSAGE: ${AGIXT_FOOTER_MESSAGE:-AGiXT 2025}
-      AGIXT_SERVER: ${AGIXT_SERVER}
+      AGIXT_SERVER: ${AGIXT_SERVER:-https://agixt.locod-ai.com}
       APP_DESCRIPTION: ${APP_DESCRIPTION:-AGiXT is an advanced artificial intelligence agent orchestration agent.}
       APP_NAME: ${APP_NAME:-AGiXT}
-      APP_URI: ${APP_URI}
+      APP_URI: ${APP_URI:-https://agixtui.locod-ai.com}
       LOG_VERBOSITY_SERVER: ${LOG_VERBOSITY_SERVER:-3}
       AGIXT_FILE_UPLOAD_ENABLED: ${AGIXT_FILE_UPLOAD_ENABLED:-true}
       AGIXT_VOICE_INPUT_ENABLED: ${AGIXT_VOICE_INPUT_ENABLED:-true}
