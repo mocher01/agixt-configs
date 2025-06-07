@@ -55,15 +55,13 @@ def generate_all_variables(config):
         'DISABLED_PROVIDERS': ''
     }
     
-    # === FRONTEND VARIABLES ===
+    # === FRONTEND VARIABLES (DEFAULTS ONLY - DON'T OVERRIDE CONFIG) ===
     frontend_defaults = {
         'MODE': 'production',
         'NEXT_TELEMETRY_DISABLED': '1',
         'AGIXT_FOOTER_MESSAGE': 'AGiXT 2025',
-        'AGIXT_SERVER': 'http://localhost:7437',
         'APP_DESCRIPTION': 'AGiXT is an advanced artificial intelligence agent orchestration agent.',
         'APP_NAME': 'AGiXT',
-        'APP_URI': 'http://localhost:3437',
         'LOG_VERBOSITY_SERVER': '3',
         'AGIXT_FILE_UPLOAD_ENABLED': 'true',
         'AGIXT_VOICE_INPUT_ENABLED': 'true',
@@ -74,6 +72,8 @@ def generate_all_variables(config):
         'AGIXT_CONVERSATION_MODE': 'select',
         'INTERACTIVE_MODE': 'chat',
         'ALLOW_EMAIL_SIGN_IN': 'true'
+        # NOTE: AGIXT_SERVER and APP_URI removed from defaults
+        # These MUST come from user config (production URLs)
     }
     
     # === EZLOCALAI VARIABLES ===
@@ -89,7 +89,7 @@ def generate_all_variables(config):
         'SD_MODEL': ''
     }
     
-    # Apply defaults
+    # Apply defaults (ONLY if not already in config)
     for key, default_value in agixt_defaults.items():
         if key not in all_vars:
             all_vars[key] = default_value
@@ -101,6 +101,18 @@ def generate_all_variables(config):
     for key, default_value in ezlocalai_defaults.items():
         if key not in all_vars:
             all_vars[key] = default_value
+    
+    # CRITICAL: Ensure production URLs from config are preserved
+    log("🔍 Checking critical URL configuration...")
+    if 'AGIXT_SERVER' in config:
+        log(f"✅ Using config AGIXT_SERVER: {config['AGIXT_SERVER']}")
+    else:
+        log("⚠️  No AGIXT_SERVER in config - using container default")
+        
+    if 'APP_URI' in config:
+        log(f"✅ Using config APP_URI: {config['APP_URI']}")
+    else:
+        log("⚠️  No APP_URI in config - using container default")
     
     # Deduce model-specific settings
     model_name = all_vars.get('MODEL_NAME', all_vars.get('DEFAULT_MODEL', ''))
